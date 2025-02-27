@@ -16,6 +16,8 @@ const clearLogBtn = document.getElementById('clearLogBtn');
 const tabs = document.querySelectorAll('.tab');
 const tabContents = document.querySelectorAll('.tab-content');
 const themeToggle = document.getElementById('themeToggle');
+const pingEnabledCheckbox = document.getElementById('pingEnabled');
+const pingIntervalInput = document.getElementById('pingInterval');
 
 // WebSocket 客戶端實例
 let wsClient = null;
@@ -55,6 +57,10 @@ function init() {
     sendBtn.addEventListener('click', sendMessage);
     clearLogBtn.addEventListener('click', clearLog);
     themeToggle.addEventListener('change', toggleTheme);
+
+    // Ping 設置事件
+    pingEnabledCheckbox.addEventListener('change', togglePingSettings);
+    pingIntervalInput.addEventListener('change', updatePingInterval);
 
     // 二進制類型變更
     binaryTypeSelect.addEventListener('change', () => {
@@ -106,6 +112,36 @@ function toggleTheme() {
     }
 }
 
+// 切換 Ping 設置
+function togglePingSettings() {
+    pingIntervalInput.disabled = !pingEnabledCheckbox.checked;
+    
+    if (wsClient && wsClient.isConnected) {
+        wsClient.enablePing(pingEnabledCheckbox.checked);
+        if (pingEnabledCheckbox.checked) {
+            updatePingInterval();
+            addLog(`已啟用自動 Ping，間隔: ${pingIntervalInput.value} 秒`, 'info');
+        } else {
+            addLog('已禁用自動 Ping', 'info');
+        }
+    }
+}
+
+// 更新 Ping 間隔
+function updatePingInterval() {
+    if (wsClient && wsClient.isConnected && pingEnabledCheckbox.checked) {
+        const seconds = parseInt(pingIntervalInput.value, 10);
+        if (isNaN(seconds) || seconds < 1) {
+            addLog('Ping 間隔必須是大於等於 1 的整數（秒）', 'error');
+            return;
+        }
+        
+        const milliseconds = seconds * 1000;
+        wsClient.setPingInterval(milliseconds);
+        addLog(`已設置 Ping 間隔: ${seconds} 秒`, 'info');
+    }
+}
+
 // 連接 WebSocket
 function connectWebSocket() {
     const url = wsUrlInput.value.trim();
@@ -114,11 +150,26 @@ function connectWebSocket() {
         return;
     }
 
+    // 如果已經有連接，先斷開它
+    if (wsClient) {
+        disconnectWebSocket();
+    }
+
     try {
         // 創建 WebSocket 客戶端
         wsClient = new WebSocketClient(url);
         wsClient.setBinaryType(binaryTypeSelect.value);
         wsClient.setParserType(parserTypeSelect.value);
+        
+        // 設置 Ping
+        if (pingEnabledCheckbox.checked) {
+            const seconds = parseInt(pingIntervalInput.value, 10);
+            if (!isNaN(seconds) && seconds >= 1) {
+                wsClient.enablePing(true);
+                wsClient.setPingInterval(seconds * 1000);
+                addLog(`已啟用自動 Ping，間隔: ${seconds} 秒`, 'info');
+            }
+        }
         
         // 添加通用消息處理器
         generalMessageHandler = data => {

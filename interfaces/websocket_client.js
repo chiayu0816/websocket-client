@@ -28,6 +28,12 @@ class WebSocketClient {
     this.parserType = 'auto'; // 默認使用自動檢測解析器
     this.binaryParser = null; // BinaryParser 實例
     
+    // Ping 相關設置
+    this.pingEnabled = false; // 是否啟用 ping
+    this.pingInterval = 30000; // 默認 30 秒
+    this.pingTimer = null; // ping 定時器
+    this.pingMessage = { type: 'ping' }; // 默認 ping 消息
+    
     // 初始化二進制解析器
     if (typeof BinaryParser !== 'undefined') {
       this.binaryParser = new BinaryParser();
@@ -40,7 +46,7 @@ class WebSocketClient {
       try {
         // 如果已經有連接，先關閉它
         if (this.socket) {
-          this.cleanupSocket();
+          this.disconnect(); // 使用 disconnect 方法來清理舊的 socket
         }
         
         console.log(`正在連接到 WebSocket 服務器: ${this.url}`);
@@ -54,6 +60,12 @@ class WebSocketClient {
           console.log('WebSocket 連接已建立');
           this.isConnected = true;
           this.reconnectAttempts = 0;
+          
+          // 如果啟用了 ping，則開始發送 ping
+          if (this.pingEnabled) {
+            this.startPing();
+          }
+          
           resolve();
         };
 
@@ -91,15 +103,26 @@ class WebSocketClient {
   disconnect() {
     this.autoReconnect = false; // 禁用自動重連
     
+    // 停止 ping
+    this.stopPing();
+    
     if (this.socket) {
-      // 清理事件處理器，防止在關閉過程中觸發事件
-      this.cleanupSocket();
-      
       // 如果連接仍然是開啟的，則關閉它
       if (this.isConnected) {
-        this.socket.close();
+        try {
+          this.socket.close();
+        } catch (e) {
+          console.error('關閉 WebSocket 時出錯:', e);
+        }
       }
       
+      // 清理事件處理器
+      this.socket.onopen = null;
+      this.socket.onmessage = null;
+      this.socket.onclose = null;
+      this.socket.onerror = null;
+      
+      this.socket = null;
       this.isConnected = false;
       console.log('WebSocket 連接已手動關閉');
     }
@@ -107,6 +130,9 @@ class WebSocketClient {
   
   // 清理 WebSocket 資源
   cleanupSocket() {
+    // 停止 ping
+    this.stopPing();
+    
     if (this.socket) {
       // 移除所有事件處理器
       this.socket.onopen = null;
@@ -407,9 +433,80 @@ class WebSocketClient {
     console.log(`已設置解析器類型: ${type}`);
   }
   
+  // 設置 ping 間隔（毫秒）
+  setPingInterval(interval) {
+    if (typeof interval !== 'number' || interval < 1000) {
+      console.error('Ping 間隔必須是大於等於 1000 的數字（毫秒）');
+      return;
+    }
+    
+    this.pingInterval = interval;
+    console.log(`已設置 Ping 間隔: ${interval}ms`);
+    
+    // 如果 ping 已啟用且連接已建立，則重新啟動 ping
+    if (this.pingEnabled && this.isConnected) {
+      this.stopPing();
+      this.startPing();
+    }
+  }
+  
+  // 設置 ping 消息
+  setPingMessage(message) {
+    this.pingMessage = message;
+    console.log('已設置 Ping 消息:', message);
+  }
+  
+  // 啟用或禁用 ping
+  enablePing(enabled = true) {
+    this.pingEnabled = enabled;
+    
+    if (enabled) {
+      console.log(`已啟用 Ping（間隔: ${this.pingInterval}ms）`);
+      if (this.isConnected) {
+        this.startPing();
+      }
+    } else {
+      console.log('已禁用 Ping');
+      this.stopPing();
+    }
+  }
+  
+  // 開始發送 ping
+  startPing() {
+    // 確保先停止現有的 ping
+    this.stopPing();
+    
+    if (!this.pingEnabled || !this.isConnected) {
+      return;
+    }
+    
+    console.log(`開始發送 Ping，間隔: ${this.pingInterval}ms`);
+    
+    // 設置定時器定期發送 ping
+    this.pingTimer = setInterval(() => {
+      if (this.isConnected) {
+        console.log('發送 Ping...');
+        this.send(this.pingMessage);
+      } else {
+        // 如果連接已斷開，則停止 ping
+        this.stopPing();
+      }
+    }, this.pingInterval);
+  }
+  
+  // 停止發送 ping
+  stopPing() {
+    if (this.pingTimer) {
+      clearInterval(this.pingTimer);
+      this.pingTimer = null;
+      console.log('已停止發送 Ping');
+    }
+  }
+  
   // 重置客戶端狀態
   reset() {
-    this.disconnect();
+    this.stopPing();
+    this.disconnect(); // disconnect 方法已經包含了清理 socket 的邏輯
     this.subscriptions.clear();
     this.messageHandlers = [];
     this.reconnectAttempts = 0;
