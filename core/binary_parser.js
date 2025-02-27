@@ -1,7 +1,9 @@
 // 二進制數據解析器 - 用於處理 Protobuf 和其他二進制格式
 
-// 檢測運行環境
-const isNode = typeof window === 'undefined';
+// 檢測運行環境 - 檢查 isNode 是否已經存在，如果不存在才宣告
+if (typeof isNode === 'undefined') {
+  var isNode = typeof window === 'undefined';
+}
 
 // 在 Node.js 環境中引入必要的模塊
 let TextEncoder, TextDecoder;

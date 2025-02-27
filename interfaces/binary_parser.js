@@ -1,7 +1,9 @@
 // 二進制數據解析器 - 用於處理 Protobuf 和其他二進制格式
 
-// 檢測運行環境
-const isNode = typeof window === 'undefined';
+// 檢測運行環境 - 檢查 isNode 是否已經存在，如果不存在才宣告
+if (typeof isNode === 'undefined') {
+  var isNode = typeof window === 'undefined';
+}
 
 // 在 Node.js 環境中引入必要的模塊
 let TextEncoder, TextDecoder;
@@ -515,6 +517,10 @@ if (isNode) {
     BinaryParser,
     ProtocolParser
   };
+} else {
+  // 在瀏覽器環境中，將 BinaryParser 和 ProtocolParser 類添加到全局作用域
+  window.BinaryParser = BinaryParser;
+  window.ProtocolParser = ProtocolParser;
 }
 
 // 如果直接運行此文件，則執行演示
