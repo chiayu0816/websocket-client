@@ -1,8 +1,11 @@
 // Node.js 示例 - 使用 WebSocket 客戶端和二進制解析器
 
 // 引入 WebSocket 客戶端和二進制解析器
-const { WebSocketClient } = require('./socket_client.js');
-const { BinaryParser, ProtocolParser } = require('./binary_parser.js');
+const { WebSocketClient } = require('../adapters/socket_client.js');
+const { BinaryParser, ProtocolParser } = require('../core/binary_parser.js');
+
+// 或者使用主索引文件
+// const { WebSocketClient, BinaryParser, ProtocolParser } = require('..');
 
 // 創建二進制解析器
 const binaryParser = new BinaryParser();

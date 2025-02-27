@@ -2,10 +2,11 @@
   "name": "websocket-binary-parser",
   "version": "1.0.0",
   "description": "WebSocket 客戶端與二進制數據解析工具",
-  "main": "socket_client.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node node_example.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node examples/node_example.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "serve": "cd interfaces && python3 -m http.server 8080"
   },
   "keywords": [
     "websocket",
@@ -14,7 +15,7 @@
     "protobuf",
     "json"
   ],
-  "author": "",
+  "author": "Chia-Yu Lee",
   "license": "MIT",
   "dependencies": {
     "ws": "^8.14.2"

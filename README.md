@@ -14,15 +14,43 @@
   - 提供十六進制數據查看功能
   - 可擴展的解碼器系統
 - **用戶友好界面**：瀏覽器環境下提供直觀的 UI 界面
+- **Clean Architecture**：採用清晰的分層架構，便於擴展和維護
+
+## 專案結構
+
+專案採用 Clean Architecture 架構，目錄結構如下：
+
+```
+websocket-client/
+├── core/               # 核心業務邏輯
+│   └── binary_parser.js  # 二進制數據解析器
+├── adapters/           # 適配器層
+│   └── socket_client.js  # WebSocket 客戶端
+├── interfaces/         # 界面層
+│   └── websocket_client.html  # 瀏覽器界面
+├── infrastructure/     # 基礎設施層
+├── utils/              # 工具函數
+├── examples/           # 示例代碼
+│   └── node_example.js   # Node.js 示例
+├── index.js            # 主入口文件
+├── package.json        # 項目配置
+└── README.md           # 項目說明
+```
 
 ## 快速開始
 
 ### 瀏覽器環境
 
-1. 直接在瀏覽器中打開 `websocket_client.html` 文件
-2. 輸入 WebSocket 服務器 URL
-3. 點擊「連接」按鈕建立連接
-4. 使用界面發送消息或訂閱主題
+1. 啟動本地服務器：
+
+```bash
+npm run serve
+```
+
+2. 在瀏覽器中訪問 `http://localhost:8080/websocket_client.html`
+3. 輸入 WebSocket 服務器 URL
+4. 點擊「連接」按鈕建立連接
+5. 使用界面發送消息或訂閱主題
 
 ### Node.js 環境
 
@@ -41,8 +69,7 @@ npm start
 或者在您的代碼中引入：
 
 ```javascript
-const { WebSocketClient } = require('./socket_client.js');
-const { BinaryParser, ProtocolParser } = require('./binary_parser.js');
+const { WebSocketClient, BinaryParser, ProtocolParser } = require('websocket-binary-parser');
 
 // 創建 WebSocket 客戶端
 const wsClient = new WebSocketClient('wss://your-websocket-server.com');
