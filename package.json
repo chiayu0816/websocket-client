@@ -1,0 +1,25 @@
+{
+  "name": "websocket-binary-parser",
+  "version": "1.0.0",
+  "description": "WebSocket 客戶端與二進制數據解析工具",
+  "main": "socket_client.js",
+  "scripts": {
+    "start": "node node_example.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "websocket",
+    "binary",
+    "parser",
+    "protobuf",
+    "json"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.14.2"
+  },
+  "optionalDependencies": {
+    "protobufjs": "^7.2.5"
+  }
+} 
