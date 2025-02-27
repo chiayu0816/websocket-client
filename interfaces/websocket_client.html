@@ -1,16 +1,61 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="zh-TW" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WebSocket Client</title>
     <style>
+        :root {
+            --bg-color: #ffffff;
+            --text-color: #333333;
+            --card-bg: #ffffff;
+            --card-border: #ddd;
+            --card-shadow: rgba(0, 0, 0, 0.1);
+            --input-bg: #ffffff;
+            --input-border: #ddd;
+            --log-bg: #f5f5f5;
+            --btn-primary: #4CAF50;
+            --btn-primary-hover: #45a049;
+            --btn-disabled: #cccccc;
+            --tab-active-bg: #ffffff;
+            --tab-border: #ddd;
+            --log-info: #0066cc;
+            --log-error: #cc0000;
+            --log-success: #008800;
+            --log-warning: #cc6600;
+            --log-received: #6600cc;
+        }
+
+        [data-theme="dark"] {
+            --bg-color: #1e1e1e;
+            --text-color: #e0e0e0;
+            --card-bg: #2d2d2d;
+            --card-border: #444;
+            --card-shadow: rgba(0, 0, 0, 0.3);
+            --input-bg: #3d3d3d;
+            --input-border: #555;
+            --log-bg: #2a2a2a;
+            --btn-primary: #388e3c;
+            --btn-primary-hover: #2e7d32;
+            --btn-disabled: #555555;
+            --tab-active-bg: #2d2d2d;
+            --tab-border: #444;
+            --log-info: #4d94ff;
+            --log-error: #ff6666;
+            --log-success: #66cc66;
+            --log-warning: #ffaa44;
+            --log-received: #bb88ff;
+        }
+
         body {
             font-family: Arial, sans-serif;
             max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
             line-height: 1.6;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: background-color 0.3s, color 0.3s;
         }
         .container {
             display: flex;
@@ -18,10 +63,12 @@
             gap: 20px;
         }
         .card {
-            border: 1px solid #ddd;
+            border: 1px solid var(--card-border);
             border-radius: 8px;
             padding: 20px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 2px 4px var(--card-shadow);
+            background-color: var(--card-bg);
+            transition: background-color 0.3s, border-color 0.3s, box-shadow 0.3s;
         }
         .form-group {
             margin-bottom: 15px;
@@ -34,24 +81,28 @@
         input[type="text"], textarea, select {
             width: 100%;
             padding: 8px;
-            border: 1px solid #ddd;
+            border: 1px solid var(--input-border);
             border-radius: 4px;
             box-sizing: border-box;
+            background-color: var(--input-bg);
+            color: var(--text-color);
+            transition: background-color 0.3s, border-color 0.3s, color 0.3s;
         }
         button {
-            background-color: #4CAF50;
+            background-color: var(--btn-primary);
             color: white;
             border: none;
             padding: 10px 15px;
             border-radius: 4px;
             cursor: pointer;
             font-size: 16px;
+            transition: background-color 0.3s;
         }
         button:hover {
-            background-color: #45a049;
+            background-color: var(--btn-primary-hover);
         }
         button:disabled {
-            background-color: #cccccc;
+            background-color: var(--btn-disabled);
             cursor: not-allowed;
         }
         .button-group {
@@ -61,48 +112,50 @@
         #logContainer {
             height: 300px;
             overflow-y: auto;
-            background-color: #f5f5f5;
+            background-color: var(--log-bg);
             padding: 10px;
             border-radius: 4px;
             font-family: monospace;
             white-space: pre-wrap;
+            transition: background-color 0.3s;
         }
         .log-entry {
             margin-bottom: 5px;
-            border-bottom: 1px solid #ddd;
+            border-bottom: 1px solid var(--card-border);
             padding-bottom: 5px;
         }
         .log-entry.info {
-            color: #0066cc;
+            color: var(--log-info);
         }
         .log-entry.error {
-            color: #cc0000;
+            color: var(--log-error);
         }
         .log-entry.success {
-            color: #008800;
+            color: var(--log-success);
         }
         .log-entry.warning {
-            color: #cc6600;
+            color: var(--log-warning);
         }
         .log-entry.received {
-            color: #6600cc;
+            color: var(--log-received);
         }
         .tabs {
             display: flex;
-            border-bottom: 1px solid #ddd;
+            border-bottom: 1px solid var(--tab-border);
             margin-bottom: 15px;
         }
         .tab {
             padding: 10px 15px;
             cursor: pointer;
             border: 1px solid transparent;
+            transition: border-color 0.3s, background-color 0.3s;
         }
         .tab.active {
-            border: 1px solid #ddd;
-            border-bottom: 1px solid white;
+            border: 1px solid var(--tab-border);
+            border-bottom: 1px solid var(--tab-active-bg);
             border-radius: 4px 4px 0 0;
             margin-bottom: -1px;
-            background-color: white;
+            background-color: var(--tab-active-bg);
         }
         .tab-content {
             display: none;
@@ -110,11 +163,75 @@
         .tab-content.active {
             display: block;
         }
+        .theme-switch {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            margin-bottom: 10px;
+        }
+        .theme-switch label {
+            margin-right: 10px;
+            margin-bottom: 0;
+            cursor: pointer;
+        }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: var(--btn-primary);
+        }
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+        .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>WebSocket 客戶端演示</h1>
+        <div class="header-container">
+            <h1>WebSocket 客戶端演示</h1>
+            <div class="theme-switch">
+                <label for="themeToggle">暗黑模式</label>
+                <label class="switch">
+                    <input type="checkbox" id="themeToggle">
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
         
         <div class="card">
             <h2>連接設置</h2>
@@ -181,244 +298,7 @@
         </div>
     </div>
 
-    <script src="socket_client.js"></script>
-    <script>
-        // DOM 元素
-        const wsUrlInput = document.getElementById('wsUrl');
-        const binaryTypeSelect = document.getElementById('binaryType');
-        const connectBtn = document.getElementById('connectBtn');
-        const disconnectBtn = document.getElementById('disconnectBtn');
-        const topicInput = document.getElementById('topic');
-        const subscribeBtn = document.getElementById('subscribeBtn');
-        const unsubscribeBtn = document.getElementById('unsubscribeBtn');
-        const subscriptionsList = document.getElementById('subscriptionsList');
-        const messageTypeSelect = document.getElementById('messageType');
-        const messageContentTextarea = document.getElementById('messageContent');
-        const sendBtn = document.getElementById('sendBtn');
-        const logContainer = document.getElementById('logContainer');
-        const clearLogBtn = document.getElementById('clearLogBtn');
-        const tabs = document.querySelectorAll('.tab');
-        const tabContents = document.querySelectorAll('.tab-content');
-
-        // WebSocket 客戶端實例
-        let wsClient = null;
-        let activeSubscriptions = new Set();
-
-        // 初始化頁面
-        function init() {
-            // 標籤頁切換
-            tabs.forEach(tab => {
-                tab.addEventListener('click', () => {
-                    const tabId = tab.getAttribute('data-tab');
-                    
-                    // 激活選中的標籤
-                    tabs.forEach(t => t.classList.remove('active'));
-                    tab.classList.add('active');
-                    
-                    // 顯示對應的內容
-                    tabContents.forEach(content => {
-                        content.classList.remove('active');
-                        if (content.id === `${tabId}-tab`) {
-                            content.classList.add('active');
-                        }
-                    });
-                });
-            });
-
-            // 按鈕事件
-            connectBtn.addEventListener('click', connectWebSocket);
-            disconnectBtn.addEventListener('click', disconnectWebSocket);
-            subscribeBtn.addEventListener('click', subscribeTopic);
-            unsubscribeBtn.addEventListener('click', unsubscribeTopic);
-            sendBtn.addEventListener('click', sendMessage);
-            clearLogBtn.addEventListener('click', clearLog);
-
-            // 設置示例消息
-            messageContentTextarea.value = JSON.stringify({
-                action: 'get_data',
-                params: {
-                    symbol: 'BTC/USDT',
-                    interval: '1m'
-                }
-            }, null, 2);
-        }
-
-        // 連接 WebSocket
-        function connectWebSocket() {
-            const url = wsUrlInput.value.trim();
-            if (!url) {
-                addLog('請輸入有效的 WebSocket URL', 'error');
-                return;
-            }
-
-            try {
-                // 創建 WebSocket 客戶端
-                wsClient = new WebSocketClient(url);
-                wsClient.setBinaryType(binaryTypeSelect.value);
-                
-                // 添加通用消息處理器
-                wsClient.addMessageHandler(data => {
-                    addLog(`收到消息: ${JSON.stringify(data, null, 2)}`, 'received');
-                });
-                
-                // 連接到服務器
-                addLog(`正在連接到 ${url}...`, 'info');
-                wsClient.connect()
-                    .then(() => {
-                        addLog('WebSocket 連接成功', 'success');
-                        updateUIState(true);
-                    })
-                    .catch(error => {
-                        addLog(`連接失敗: ${error}`, 'error');
-                        wsClient = null;
-                        updateUIState(false);
-                    });
-            } catch (error) {
-                addLog(`創建 WebSocket 客戶端時出錯: ${error}`, 'error');
-            }
-        }
-
-        // 斷開 WebSocket 連接
-        function disconnectWebSocket() {
-            if (wsClient) {
-                wsClient.disconnect();
-                addLog('WebSocket 連接已斷開', 'info');
-                wsClient = null;
-                activeSubscriptions.clear();
-                updateSubscriptionsList();
-                updateUIState(false);
-            }
-        }
-
-        // 訂閱主題
-        function subscribeTopic() {
-            const topic = topicInput.value.trim();
-            if (!topic) {
-                addLog('請輸入有效的主題', 'error');
-                return;
-            }
-
-            if (wsClient && wsClient.isConnected) {
-                wsClient.subscribe(topic, data => {
-                    addLog(`主題 "${topic}" 收到數據: ${JSON.stringify(data, null, 2)}`, 'received');
-                });
-                activeSubscriptions.add(topic);
-                updateSubscriptionsList();
-                addLog(`已訂閱主題: ${topic}`, 'success');
-            } else {
-                addLog('WebSocket 未連接，無法訂閱主題', 'error');
-            }
-        }
-
-        // 取消訂閱主題
-        function unsubscribeTopic() {
-            const topic = topicInput.value.trim();
-            if (!topic) {
-                addLog('請輸入有效的主題', 'error');
-                return;
-            }
-
-            if (wsClient && wsClient.isConnected) {
-                wsClient.unsubscribe(topic);
-                activeSubscriptions.delete(topic);
-                updateSubscriptionsList();
-                addLog(`已取消訂閱主題: ${topic}`, 'info');
-            } else {
-                addLog('WebSocket 未連接，無法取消訂閱主題', 'error');
-            }
-        }
-
-        // 發送消息
-        function sendMessage() {
-            if (!wsClient || !wsClient.isConnected) {
-                addLog('WebSocket 未連接，無法發送消息', 'error');
-                return;
-            }
-
-            const messageType = messageTypeSelect.value;
-            const content = messageContentTextarea.value.trim();
-            
-            if (!content) {
-                addLog('請輸入消息內容', 'error');
-                return;
-            }
-
-            try {
-                let message;
-                
-                switch (messageType) {
-                    case 'json':
-                        message = JSON.parse(content);
-                        break;
-                    case 'text':
-                        message = content;
-                        break;
-                    case 'binary':
-                        // 將文本轉換為二進制數據
-                        const encoder = new TextEncoder();
-                        message = encoder.encode(content).buffer;
-                        break;
-                }
-                
-                const success = wsClient.send(message);
-                if (success) {
-                    addLog(`已發送 ${messageType} 消息: ${content}`, 'success');
-                } else {
-                    addLog('發送消息失敗', 'error');
-                }
-            } catch (error) {
-                addLog(`準備消息時出錯: ${error}`, 'error');
-            }
-        }
-
-        // 更新訂閱列表
-        function updateSubscriptionsList() {
-            subscriptionsList.innerHTML = '';
-            
-            if (activeSubscriptions.size === 0) {
-                subscriptionsList.innerHTML = '<p>無訂閱</p>';
-                return;
-            }
-            
-            const list = document.createElement('ul');
-            activeSubscriptions.forEach(topic => {
-                const item = document.createElement('li');
-                item.textContent = topic;
-                list.appendChild(item);
-            });
-            
-            subscriptionsList.appendChild(list);
-        }
-
-        // 更新 UI 狀態
-        function updateUIState(isConnected) {
-            connectBtn.disabled = isConnected;
-            disconnectBtn.disabled = !isConnected;
-            subscribeBtn.disabled = !isConnected;
-            unsubscribeBtn.disabled = !isConnected;
-            sendBtn.disabled = !isConnected;
-            binaryTypeSelect.disabled = isConnected;
-        }
-
-        // 添加日誌
-        function addLog(message, type = 'info') {
-            const logEntry = document.createElement('div');
-            logEntry.className = `log-entry ${type}`;
-            
-            const timestamp = new Date().toLocaleTimeString();
-            logEntry.textContent = `[${timestamp}] ${message}`;
-            
-            logContainer.appendChild(logEntry);
-            logContainer.scrollTop = logContainer.scrollHeight;
-        }
-
-        // 清除日誌
-        function clearLog() {
-            logContainer.innerHTML = '';
-        }
-
-        // 初始化頁面
-        document.addEventListener('DOMContentLoaded', init);
-    </script>
+    <script src="websocket_client.js"></script>
+    <script src="websocket_ui.js"></script>
 </body>
 </html> 

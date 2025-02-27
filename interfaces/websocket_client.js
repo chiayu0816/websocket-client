@@ -22,12 +22,18 @@ class WebSocketClient {
     this.subscriptions = new Map();
     this.messageHandlers = [];
     this.binaryType = 'arraybuffer'; // 'arraybuffer' 或 'blob'
+    this.autoReconnect = true; // 是否自動重連
   }
 
   // 連接到 WebSocket 服務器
   connect() {
     return new Promise((resolve, reject) => {
       try {
+        // 如果已經有連接，先關閉它
+        if (this.socket) {
+          this.cleanupSocket();
+        }
+        
         console.log(`正在連接到 WebSocket 服務器: ${this.url}`);
         this.socket = new WebSocketImpl(this.url);
         
@@ -53,7 +59,7 @@ class WebSocketClient {
           this.isConnected = false;
           
           // 嘗試重新連接
-          if (this.reconnectAttempts < this.maxReconnectAttempts) {
+          if (this.autoReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
             this.reconnectAttempts++;
             console.log(`嘗試重新連接 (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
             setTimeout(() => this.connect(), this.reconnectInterval);
@@ -74,16 +80,45 @@ class WebSocketClient {
 
   // 關閉 WebSocket 連接
   disconnect() {
-    if (this.socket && this.isConnected) {
-      this.socket.close();
+    this.autoReconnect = false; // 禁用自動重連
+    
+    if (this.socket) {
+      // 清理事件處理器，防止在關閉過程中觸發事件
+      this.cleanupSocket();
+      
+      // 如果連接仍然是開啟的，則關閉它
+      if (this.isConnected) {
+        this.socket.close();
+      }
+      
       this.isConnected = false;
       console.log('WebSocket 連接已手動關閉');
+    }
+  }
+  
+  // 清理 WebSocket 資源
+  cleanupSocket() {
+    if (this.socket) {
+      // 移除所有事件處理器
+      this.socket.onopen = null;
+      this.socket.onmessage = null;
+      this.socket.onclose = null;
+      this.socket.onerror = null;
+      
+      // 關閉連接
+      try {
+        this.socket.close();
+      } catch (e) {
+        console.error('關閉 WebSocket 時出錯:', e);
+      }
+      
+      this.socket = null;
     }
   }
 
   // 發送消息到服務器
   send(data) {
-    if (!this.isConnected) {
+    if (!this.isConnected || !this.socket) {
       console.error('WebSocket 未連接，無法發送消息');
       return false;
     }
@@ -183,8 +218,20 @@ class WebSocketClient {
     return false;
   }
 
+  // 清除所有消息處理器
+  clearMessageHandlers() {
+    this.messageHandlers = [];
+    console.log('已清除所有消息處理器');
+  }
+
   // 處理接收到的消息
   handleMessage(data) {
+    // 如果連接已關閉，不處理消息
+    if (!this.isConnected) {
+      console.warn('WebSocket 已斷開，忽略接收到的消息');
+      return;
+    }
+    
     try {
       let parsedData;
       
@@ -217,6 +264,12 @@ class WebSocketClient {
 
   // 處理解析後的消息
   processMessage(parsedData) {
+    // 再次檢查連接狀態
+    if (!this.isConnected) {
+      console.warn('WebSocket 已斷開，忽略處理消息');
+      return;
+    }
+    
     console.log('收到消息:', parsedData);
     
     // 檢查消息是否包含主題信息
@@ -319,79 +372,21 @@ class WebSocketClient {
       console.error('無效的二進制類型。必須是 "arraybuffer" 或 "blob"');
     }
   }
-}
-
-// 使用示例
-function demoWebSocketClient() {
-  // 創建 WebSocket 客戶端實例
-  const client = new WebSocketClient('wss://echo.websocket.org');
   
-  // 連接到服務器
-  client.connect()
-    .then(() => {
-      console.log('連接成功，開始訂閱主題');
-      
-      // 訂閱主題
-      client.subscribe('market_data', (data) => {
-        console.log('收到市場數據:', data);
-      });
-      
-      // 添加通用消息處理器
-      client.addMessageHandler((data) => {
-        console.log('通用處理器收到消息:', data);
-      });
-      
-      // 發送消息示例
-      client.send({
-        action: 'get_data',
-        params: {
-          symbol: 'BTC/USDT',
-          interval: '1m'
-        }
-      });
-      
-      // 30秒後斷開連接 (僅用於演示)
-      setTimeout(() => {
-        client.disconnect();
-      }, 30000);
-    })
-    .catch(error => {
-      console.error('連接失敗:', error);
-    });
-}
-
-// 高級二進制數據解析示例
-function parseProtobufExample(buffer) {
-  // 注意：這只是一個示例框架，實際使用時需要引入 protobuf 庫
-  // 並根據您的協議定義進行解析
-  console.log('解析 Protobuf 數據...');
-  
-  // 假設我們有一個 protobuf 解析器
-  // const message = protobuf.decode(buffer);
-  // return message;
-  
-  // 這裡只是返回一個模擬的解析結果
-  return {
-    type: 'protobuf_parsed',
-    timestamp: Date.now(),
-    data: {
-      id: 12345,
-      name: 'sample_data',
-      values: [1, 2, 3, 4, 5]
-    }
-  };
+  // 重置客戶端狀態
+  reset() {
+    this.disconnect();
+    this.subscriptions.clear();
+    this.messageHandlers = [];
+    this.reconnectAttempts = 0;
+    this.autoReconnect = true;
+    console.log('WebSocket 客戶端已重置');
+  }
 }
 
 // 導出模塊
 if (isNode) {
   module.exports = {
-    WebSocketClient,
-    demoWebSocketClient,
-    parseProtobufExample
+    WebSocketClient
   };
-}
-
-// 如果直接運行此文件，則執行演示
-if (isNode && require.main === module) {
-  demoWebSocketClient();
-}
+} 
