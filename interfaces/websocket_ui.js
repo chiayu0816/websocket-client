@@ -1,6 +1,7 @@
 // DOM 元素
 const wsUrlInput = document.getElementById('wsUrl');
 const binaryTypeSelect = document.getElementById('binaryType');
+const parserTypeSelect = document.getElementById('parserType');
 const connectBtn = document.getElementById('connectBtn');
 const disconnectBtn = document.getElementById('disconnectBtn');
 const topicInput = document.getElementById('topic');
@@ -55,6 +56,22 @@ function init() {
     clearLogBtn.addEventListener('click', clearLog);
     themeToggle.addEventListener('change', toggleTheme);
 
+    // 二進制類型變更
+    binaryTypeSelect.addEventListener('change', () => {
+        if (wsClient && wsClient.isConnected) {
+            wsClient.setBinaryType(binaryTypeSelect.value);
+            addLog(`已設置二進制數據類型: ${binaryTypeSelect.value}`, 'info');
+        }
+    });
+    
+    // 解析器類型變更
+    parserTypeSelect.addEventListener('change', () => {
+        if (wsClient && wsClient.isConnected) {
+            wsClient.setParserType(parserTypeSelect.value);
+            addLog(`已設置解析器類型: ${parserTypeSelect.value}`, 'info');
+        }
+    });
+
     // 設置示例消息
     messageContentTextarea.value = JSON.stringify({
         action: 'get_data',
@@ -101,6 +118,7 @@ function connectWebSocket() {
         // 創建 WebSocket 客戶端
         wsClient = new WebSocketClient(url);
         wsClient.setBinaryType(binaryTypeSelect.value);
+        wsClient.setParserType(parserTypeSelect.value);
         
         // 添加通用消息處理器
         generalMessageHandler = data => {

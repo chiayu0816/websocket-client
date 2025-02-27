@@ -1,7 +1,9 @@
 // WebSocket 客戶端 - 用於連接、訂閱、解析二進制數據並轉換為 JSON
 
-// 檢測運行環境
-const isNode = typeof window === 'undefined';
+// 檢測運行環境 - 檢查 isNode 是否已經存在，如果不存在才宣告
+if (typeof isNode === 'undefined') {
+  var isNode = typeof window === 'undefined';
+}
 
 // 在 Node.js 環境中引入 WebSocket 庫
 let WebSocketImpl;
@@ -23,6 +25,13 @@ class WebSocketClient {
     this.messageHandlers = [];
     this.binaryType = 'arraybuffer'; // 'arraybuffer' 或 'blob'
     this.autoReconnect = true; // 是否自動重連
+    this.parserType = 'auto'; // 默認使用自動檢測解析器
+    this.binaryParser = null; // BinaryParser 實例
+    
+    // 初始化二進制解析器
+    if (typeof BinaryParser !== 'undefined') {
+      this.binaryParser = new BinaryParser();
+    }
   }
 
   // 連接到 WebSocket 服務器
@@ -310,9 +319,28 @@ class WebSocketClient {
   // 解析二進制數據
   parseBinaryData(buffer) {
     try {
-      // 這裡是一個簡單的二進制解析示例
-      // 實際應用中，您需要根據協議格式進行適當的解析
+      // 如果有 BinaryParser 實例，則使用它進行解析
+      if (this.binaryParser) {
+        // 根據選擇的解析器類型進行解析
+        switch (this.parserType) {
+          case 'auto':
+            return this.binaryParser.autoDetectAndParse(buffer);
+          case 'utf8':
+            return this.binaryParser.decode(buffer, 'utf8');
+          case 'json':
+            return this.binaryParser.decode(buffer, 'json');
+          case 'hex':
+            return this.binaryParser.decode(buffer, 'hex');
+          case 'binary':
+            return this.binaryParser.decode(buffer, 'binary');
+          case 'inspect':
+            return this.binaryParser.inspectBinary(buffer);
+          default:
+            return this.binaryParser.autoDetectAndParse(buffer);
+        }
+      }
       
+      // 如果沒有 BinaryParser 實例，則使用簡單的解析方法
       // 確保我們有一個 ArrayBuffer
       const arrayBuffer = isNode && buffer instanceof Buffer 
         ? buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
@@ -373,6 +401,12 @@ class WebSocketClient {
     }
   }
   
+  // 設置解析器類型
+  setParserType(type) {
+    this.parserType = type;
+    console.log(`已設置解析器類型: ${type}`);
+  }
+  
   // 重置客戶端狀態
   reset() {
     this.disconnect();
@@ -389,4 +423,7 @@ if (isNode) {
   module.exports = {
     WebSocketClient
   };
+} else {
+  // 在瀏覽器環境中，將 WebSocketClient 類添加到全局作用域
+  window.WebSocketClient = WebSocketClient;
 } 
