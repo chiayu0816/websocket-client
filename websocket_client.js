@@ -167,6 +167,18 @@ class WebSocketClient {
   subscribe(topic, callback) {
     if (!this.subscriptions.has(topic)) {
       this.subscriptions.set(topic, []);
+      
+      // 向服務器發送訂閱請求
+      if (this.isConnected && this.socket) {
+        const subscribeMessage = {
+          action: 'subscribe',
+          topic: topic
+        };
+        this.send(subscribeMessage);
+        console.log(`向服務器發送訂閱請求: ${topic}`);
+      } else {
+        console.warn(`WebSocket 未連接，無法發送訂閱請求: ${topic}`);
+      }
     }
     
     // 添加回調函數到訂閱列表
@@ -192,10 +204,30 @@ class WebSocketClient {
       // 如果沒有更多回調，則完全取消訂閱
       if (callbacks.length === 0) {
         this.subscriptions.delete(topic);
+        
+        // 向服務器發送取消訂閱請求
+        if (this.isConnected && this.socket) {
+          const unsubscribeMessage = {
+            action: 'unsubscribe',
+            topic: topic
+          };
+          this.send(unsubscribeMessage);
+          console.log(`向服務器發送取消訂閱請求: ${topic}`);
+        }
       }
     } else {
       // 移除所有回調
       this.subscriptions.delete(topic);
+      
+      // 向服務器發送取消訂閱請求
+      if (this.isConnected && this.socket) {
+        const unsubscribeMessage = {
+          action: 'unsubscribe',
+          topic: topic
+        };
+        this.send(unsubscribeMessage);
+        console.log(`向服務器發送取消訂閱請求: ${topic}`);
+      }
     }
     
     console.log(`已取消訂閱主題: ${topic}`);
