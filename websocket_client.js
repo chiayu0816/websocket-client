@@ -232,16 +232,11 @@ class WebSocketClient {
   async parseCompressedData(compressed) {
     try {
       // 使用 pako 解壓縮數據
-      const decompressed = pako.inflate(new Uint8Array(compressed));
-      // 轉換為文本
-      const jsonText = new TextDecoder().decode(decompressed);
+      const decompressed = pako.inflate(new Uint8Array(compressed), { to: 'string' });
       // 解析 JSON
-      return JSON.parse(jsonText);
+      return JSON.parse(decompressed);
     } catch (error) {
       console.error('解析壓縮數據時出錯:', error);
-      if (error.message.includes('pako')) {
-        console.error('請確保在 HTML 中正確引入 pako 庫，並且在 WebSocket 客戶端代碼之前加載');
-      }
       throw error;
     }
   }
