@@ -277,36 +277,60 @@ class WebSocketClient {
           const hexString = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' ');
           console.log('原始數據(hex):', hexString.substring(0, 100) + (hexString.length > 100 ? '...' : ''));
 
-          // 嘗試使用 TextDecoder 解碼
-          const decoder = new TextDecoder('utf-8', { fatal: true });
-          const text = decoder.decode(event.data);
+          let text;
+          try {
+            // 首先嘗試 UTF-8
+            const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
+            text = utf8Decoder.decode(event.data);
+          } catch (decodeError) {
+            console.log('UTF-8 解碼失敗，嘗試其他方法...');
+            
+            try {
+              // 嘗試 ASCII 解碼
+              const asciiDecoder = new TextDecoder('ascii', { fatal: false });
+              text = asciiDecoder.decode(event.data);
+            } catch (asciiError) {
+              console.log('ASCII 解碼也失敗，嘗試手動轉換...');
+              
+              // 手動將二進制數據轉換為字符串
+              text = String.fromCharCode.apply(null, bytes);
+            }
+          }
           
           // 檢查解碼後的文本
-          if (text.length === 0) {
-            console.warn('解碼後得到空文本');
+          if (!text || text.length === 0) {
+            console.warn('無法解碼數據為文本');
             return;
           }
           
           console.log('解碼後的文本:', text.substring(0, 200));
           
           // 檢查文本是否以有效的 JSON 字符開始
-          if (!['{', '['].includes(text.trim()[0])) {
+          const trimmedText = text.trim();
+          if (!['{', '['].includes(trimmedText[0])) {
             console.warn('解碼後的文本不是有效的 JSON 格式');
-            return;
+            // 嘗試在文本中查找 JSON
+            const jsonStart = trimmedText.indexOf('{');
+            const jsonStartArr = trimmedText.indexOf('[');
+            const startIndex = jsonStart >= 0 && jsonStartArr >= 0 
+              ? Math.min(jsonStart, jsonStartArr)
+              : Math.max(jsonStart, jsonStartArr);
+            
+            if (startIndex >= 0) {
+              text = trimmedText.substring(startIndex);
+              console.log('找到可能的 JSON 部分:', text.substring(0, 200));
+            } else {
+              return;
+            }
           }
 
           // 嘗試解析 JSON
           const parsedData = JSON.parse(text);
           this.processMessage(parsedData);
         } catch (error) {
-          if (error instanceof TypeError && error.message.includes('TextDecoder')) {
-            console.error('TextDecoder 解碼失敗:', error);
-          } else {
-            console.error('解析 ArrayBuffer JSON 時出錯:', error);
-            // 如果有解碼後的文本，顯示它
-            if (typeof text !== 'undefined') {
-              console.error('嘗試解析的文本:', text.substring(0, 200));
-            }
+          console.error('處理二進制數據時出錯:', error);
+          if (typeof text !== 'undefined') {
+            console.error('最後嘗試解析的文本:', text.substring(0, 200));
           }
         }
       } else if (typeof event.data === 'string') {
