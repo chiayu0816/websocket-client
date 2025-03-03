@@ -1,108 +1,86 @@
-// DOM 元素
-let wsUrlInput;
-let connectBtn;
-let disconnectBtn;
-let topicInput;
-let subscribeBtn;
-let unsubscribeBtn;
-let subscriptionsList;
-let messageTypeSelect;
-let messageContentTextarea;
-let sendBtn;
-let logContainer;
-let clearLogBtn;
-let tabs;
-let tabContents;
-let themeToggle;
-let autoSendEnabledCheckbox;
-let autoSendIntervalInput;
-
-// WebSocket 客戶端實例
+// WebSocket 客戶端實例和相關狀態
 let wsClient = null;
 let activeSubscriptions = new Map(); // 存儲活動訂閱
 let autoSendTasks = new Map(); // 存儲定時發送任務
-// 保存通用消息處理器的引用，以便在斷開連接時移除
-let generalMessageHandler = null;
+let generalMessageHandler = null; // 保存通用消息處理器的引用
 
 // 初始化頁面
-window.onload = function() {
+document.addEventListener('DOMContentLoaded', function() {
     console.log('頁面已加載，開始初始化...');
-    setTimeout(function() {
-        try {
-            console.log('開始初始化頁面...');
-            
-            // 初始化主題
-            initTheme();
-            
-            // 綁定主題切換事件
-            const themeToggle = document.getElementById('themeToggle');
-            if (themeToggle) {
-                themeToggle.onchange = toggleTheme;
-            }
-            
-            // 標籤頁切換 - 使用更安全的方式
-            const tabs = document.querySelectorAll('.tab');
-            if (tabs && tabs.length > 0) {
-                for (let i = 0; i < tabs.length; i++) {
-                    const tab = tabs[i];
-                    if (tab) {
-                        tab.onclick = function() {
-                            const tabId = this.getAttribute('data-tab');
-                            
-                            // 激活選中的標籤
-                            for (let j = 0; j < tabs.length; j++) {
-                                if (tabs[j]) tabs[j].classList.remove('active');
-                            }
-                            this.classList.add('active');
-                            
-                            // 顯示對應的內容
-                            const tabContents = document.querySelectorAll('.tab-content');
-                            for (let k = 0; k < tabContents.length; k++) {
-                                const content = tabContents[k];
-                                if (content) {
-                                    content.classList.remove('active');
-                                    if (content.id === `${tabId}-tab`) {
-                                        content.classList.add('active');
-                                    }
+    try {
+        console.log('開始初始化頁面...');
+        
+        // 初始化主題
+        initTheme();
+        
+        // 綁定主題切換事件
+        const themeToggle = document.getElementById('themeToggle');
+        if (themeToggle) {
+            themeToggle.onchange = toggleTheme;
+        }
+        
+        // 標籤頁切換 - 使用更安全的方式
+        const tabs = document.querySelectorAll('.tab');
+        if (tabs && tabs.length > 0) {
+            for (let i = 0; i < tabs.length; i++) {
+                const tab = tabs[i];
+                if (tab) {
+                    tab.onclick = function() {
+                        const tabId = this.getAttribute('data-tab');
+                        
+                        // 激活選中的標籤
+                        for (let j = 0; j < tabs.length; j++) {
+                            if (tabs[j]) tabs[j].classList.remove('active');
+                        }
+                        this.classList.add('active');
+                        
+                        // 顯示對應的內容
+                        const tabContents = document.querySelectorAll('.tab-content');
+                        for (let k = 0; k < tabContents.length; k++) {
+                            const content = tabContents[k];
+                            if (content) {
+                                content.classList.remove('active');
+                                if (content.id === `${tabId}-tab`) {
+                                    content.classList.add('active');
                                 }
                             }
-                        };
-                    }
+                        }
+                    };
                 }
             }
-
-            // 按鈕事件 - 使用更安全的方式
-            const connectBtn = document.getElementById('connectBtn');
-            if (connectBtn) connectBtn.onclick = connectWebSocket;
-            
-            const disconnectBtn = document.getElementById('disconnectBtn');
-            if (disconnectBtn) disconnectBtn.onclick = disconnectWebSocket;
-            
-            const subscribeBtn = document.getElementById('subscribeBtn');
-            if (subscribeBtn) subscribeBtn.onclick = subscribeTopic;
-            
-            const unsubscribeBtn = document.getElementById('unsubscribeBtn');
-            if (unsubscribeBtn) unsubscribeBtn.onclick = unsubscribeTopic;
-            
-            const sendBtn = document.getElementById('sendBtn');
-            if (sendBtn) sendBtn.onclick = sendMessage;
-            
-            const clearLogBtn = document.getElementById('clearLogBtn');
-            if (clearLogBtn) clearLogBtn.onclick = clearLog;
-            
-            // 定時發送相關
-            const autoSendIntervalInput = document.getElementById('autoSendInterval');
-            if (autoSendIntervalInput) autoSendIntervalInput.onchange = updateAutoSendInterval;
-            
-            const addAutoSendBtn = document.getElementById('addAutoSendBtn');
-            if (addAutoSendBtn) addAutoSendBtn.onclick = addAutoSendTask;
-            
-            console.log('頁面初始化完成');
-        } catch (error) {
-            console.error('初始化頁面時出錯:', error);
         }
-    }, 500); // 增加延遲時間，確保所有元素都已加載
-};
+
+        // 按鈕事件 - 使用更安全的方式
+        const connectBtn = document.getElementById('connectBtn');
+        if (connectBtn) connectBtn.onclick = connectWebSocket;
+        
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        if (disconnectBtn) disconnectBtn.onclick = disconnectWebSocket;
+        
+        const subscribeBtn = document.getElementById('subscribeBtn');
+        if (subscribeBtn) subscribeBtn.onclick = subscribeTopic;
+        
+        const unsubscribeBtn = document.getElementById('unsubscribeBtn');
+        if (unsubscribeBtn) unsubscribeBtn.onclick = unsubscribeTopic;
+        
+        const sendBtn = document.getElementById('sendBtn');
+        if (sendBtn) sendBtn.onclick = sendMessage;
+        
+        const clearLogBtn = document.getElementById('clearLogBtn');
+        if (clearLogBtn) clearLogBtn.onclick = clearLog;
+        
+        // 定時發送相關
+        const autoSendIntervalInput = document.getElementById('autoSendInterval');
+        if (autoSendIntervalInput) autoSendIntervalInput.onchange = updateAutoSendInterval;
+        
+        const addAutoSendBtn = document.getElementById('addAutoSendBtn');
+        if (addAutoSendBtn) addAutoSendBtn.onclick = addAutoSendTask;
+        
+        console.log('頁面初始化完成');
+    } catch (error) {
+        console.error('初始化頁面時出錯:', error);
+    }
+});
 
 // 初始化主題
 function initTheme() {

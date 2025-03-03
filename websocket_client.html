@@ -119,26 +119,6 @@
             white-space: pre-wrap;
             transition: background-color 0.3s;
         }
-        .log-entry {
-            margin-bottom: 5px;
-            border-bottom: 1px solid var(--card-border);
-            padding-bottom: 5px;
-        }
-        .log-entry.info {
-            color: var(--log-info);
-        }
-        .log-entry.error {
-            color: var(--log-error);
-        }
-        .log-entry.success {
-            color: var(--log-success);
-        }
-        .log-entry.warning {
-            color: var(--log-warning);
-        }
-        .log-entry.received {
-            color: var(--log-received);
-        }
         .tabs {
             display: flex;
             border-bottom: 1px solid var(--tab-border);
@@ -226,50 +206,9 @@
             overflow-y: auto;
             background-color: var(--input-bg);
         }
-        .task-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px;
-            border-bottom: 1px solid var(--card-border);
-        }
-        .task-item:last-child {
-            border-bottom: none;
-        }
-        .task-info {
-            flex: 1;
-        }
-        .task-actions {
-            display: flex;
-            gap: 5px;
-        }
         .small-btn {
             padding: 5px 10px;
             font-size: 14px;
-        }
-        .task-status {
-            display: inline-block;
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            margin-right: 5px;
-        }
-        .task-status.active {
-            background-color: var(--log-success);
-        }
-        .task-status.inactive {
-            background-color: var(--log-error);
-        }
-        .task-message {
-            font-family: monospace;
-            font-size: 12px;
-            color: var(--text-color);
-            opacity: 0.8;
-            margin-top: 3px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 300px;
         }
     </style>
 </head>
@@ -334,7 +273,7 @@
                     <textarea id="messageContent" rows="5"></textarea>
                 </div>
                 <div class="form-group">
-                    <label for="autoSendEnabled">定時發送設置:</label>
+                    <label>定時發送設置:</label>
                     <div style="display: flex; align-items: center; margin-bottom: 10px;">
                         <div style="display: flex; align-items: center; flex: 1;">
                             <label for="autoSendInterval" style="margin-bottom: 0; margin-right: 10px;">間隔 (秒):</label>
@@ -359,10 +298,10 @@
     </div>
 
     <!-- 第三方庫 -->
-    <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
+    <script src="pako.min.js" defer></script>
 
     <!-- 應用程序腳本 -->
-    <script src="websocket_client.js"></script>
-    <script src="websocket_ui.js"></script>
+    <script src="websocket_client.js" type="module"></script>
+    <script src="websocket_ui.js" type="module"></script>
 </body>
 </html> 

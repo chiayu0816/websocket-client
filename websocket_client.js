@@ -12,16 +12,28 @@ class WebSocketClient {
     this.messageHandlers = [];
     this.autoReconnect = true; // 是否自動重連
     this.autoSendTasks = new Map(); // 存儲多個定時發送任務，鍵為任務ID，值為任務對象
+  }
+
+  // 初始化並檢查依賴
+  async initialize() {
+    // 等待一段時間確保 pako 加載完成
+    await new Promise(resolve => setTimeout(resolve, 100));
 
     // 檢查 pako 是否可用
-    if (typeof pako === 'undefined') {
-      console.error('pako 庫未加載！請確保在 HTML 中正確引入 pako 庫。');
-      throw new Error('pako 庫未加載');
+    if (typeof window.pako === 'undefined') {
+      const error = new Error('pako 庫未加載，請確保在 HTML 中正確引入 pako 庫。');
+      console.error(error.message);
+      throw error;
     }
+
+    return this;
   }
 
   // 連接到 WebSocket 服務器
-  connect() {
+  async connect() {
+    // 確保先初始化
+    await this.initialize();
+
     return new Promise((resolve, reject) => {
       if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) {
         console.log('WebSocket 已經連接或正在連接中');
@@ -155,14 +167,6 @@ class WebSocketClient {
   subscribe(topic, callback) {
     if (!this.subscriptions.has(topic)) {
       this.subscriptions.set(topic, []);
-      
-      // 向服務器發送訂閱請求
-      const subscriptionMessage = {
-        action: 'subscribe',
-        topic: topic
-      };
-      
-      this.send(subscriptionMessage);
     }
     
     // 添加回調函數到訂閱列表
@@ -188,26 +192,10 @@ class WebSocketClient {
       // 如果沒有更多回調，則完全取消訂閱
       if (callbacks.length === 0) {
         this.subscriptions.delete(topic);
-        
-        // 向服務器發送取消訂閱請求
-        const unsubscriptionMessage = {
-          action: 'unsubscribe',
-          topic: topic
-        };
-        
-        this.send(unsubscriptionMessage);
       }
     } else {
       // 移除所有回調
       this.subscriptions.delete(topic);
-      
-      // 向服務器發送取消訂閱請求
-      const unsubscriptionMessage = {
-        action: 'unsubscribe',
-        topic: topic
-      };
-      
-      this.send(unsubscriptionMessage);
     }
     
     console.log(`已取消訂閱主題: ${topic}`);
@@ -220,22 +208,6 @@ class WebSocketClient {
       return true;
     }
     return false;
-  }
-
-  // 移除通用消息處理器
-  removeMessageHandler(handler) {
-    const index = this.messageHandlers.indexOf(handler);
-    if (index !== -1) {
-      this.messageHandlers.splice(index, 1);
-      return true;
-    }
-    return false;
-  }
-
-  // 清除所有消息處理器
-  clearMessageHandlers() {
-    this.messageHandlers = [];
-    console.log('已清除所有消息處理器');
   }
 
   // 處理接收到的消息
@@ -259,11 +231,6 @@ class WebSocketClient {
   // 解析壓縮的數據
   async parseCompressedData(compressed) {
     try {
-      // 再次檢查 pako 是否可用
-      if (typeof pako === 'undefined') {
-        throw new Error('pako 庫未加載，無法解壓縮數據');
-      }
-
       // 使用 pako 解壓縮數據
       const decompressed = pako.inflate(new Uint8Array(compressed));
       // 轉換為文本
@@ -312,25 +279,6 @@ class WebSocketClient {
         console.error('執行通用消息處理器時出錯:', error);
       }
     });
-  }
-
-  // 設置定時發送間隔（毫秒）- 已不再使用，保留向後兼容
-  setAutoSendInterval(interval) {
-    if (typeof interval !== 'number' || interval < 1000) {
-      console.error('定時發送間隔必須是大於等於 1000 的數字（毫秒）');
-      return;
-    }
-    
-    console.log(`已設置定時發送間隔: ${interval}ms`);
-    
-    // 如果有舊的定時發送任務，更新其間隔
-    if (this.autoSendTasks.size === 1) {
-      const taskId = Array.from(this.autoSendTasks.keys())[0];
-      const task = this.autoSendTasks.get(taskId);
-      if (task) {
-        this.updateAutoSendTask(taskId, task.message, interval);
-      }
-    }
   }
   
   // 添加定時發送任務
