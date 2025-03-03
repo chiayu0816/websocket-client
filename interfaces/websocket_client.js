@@ -28,11 +28,8 @@ class WebSocketClient {
     this.parserType = 'auto'; // 默認使用自動檢測解析器
     this.binaryParser = null; // BinaryParser 實例
     
-    // Ping 相關設置
-    this.pingEnabled = false; // 是否啟用 ping
-    this.pingInterval = 30000; // 默認 30 秒
-    this.pingTimer = null; // ping 定時器
-    this.pingMessage = { type: 'ping' }; // 默認 ping 消息
+    // 定時發送相關設置 - 改為支持多個定時發送任務
+    this.autoSendTasks = new Map(); // 存儲多個定時發送任務，鍵為任務ID，值為任務對象
     
     // 初始化二進制解析器
     if (typeof BinaryParser !== 'undefined') {
@@ -43,57 +40,60 @@ class WebSocketClient {
   // 連接到 WebSocket 服務器
   connect() {
     return new Promise((resolve, reject) => {
+      if (this.socket && (this.socket.readyState === WebSocketImpl.OPEN || this.socket.readyState === WebSocketImpl.CONNECTING)) {
+        console.log('WebSocket 已經連接或正在連接中');
+        resolve();
+        return;
+      }
+      
       try {
-        // 如果已經有連接，先關閉它
-        if (this.socket) {
-          this.disconnect(); // 使用 disconnect 方法來清理舊的 socket
-        }
-        
-        console.log(`正在連接到 WebSocket 服務器: ${this.url}`);
+        console.log(`正在連接到 ${this.url}...`);
         this.socket = new WebSocketImpl(this.url);
         
         // 設置二進制數據類型
         this.socket.binaryType = this.binaryType;
-
-        // 連接成功時的處理
+        
         this.socket.onopen = () => {
-          console.log('WebSocket 連接已建立');
+          console.log('WebSocket 連接已打開');
           this.isConnected = true;
           this.reconnectAttempts = 0;
           
-          // 如果啟用了 ping，則開始發送 ping
-          if (this.pingEnabled) {
-            this.startPing();
+          // 啟動所有已啟用的定時發送任務
+          for (const [taskId, task] of this.autoSendTasks.entries()) {
+            if (task.enabled) {
+              this.startAutoSendTask(taskId);
+            }
           }
           
           resolve();
         };
-
-        // 接收消息的處理
-        this.socket.onmessage = (event) => {
-          this.handleMessage(event.data);
-        };
-
-        // 連接關閉時的處理
+        
         this.socket.onclose = (event) => {
           console.log(`WebSocket 連接已關閉: ${event.code} ${event.reason}`);
           this.isConnected = false;
           
-          // 嘗試重新連接
-          if (this.autoReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
-            this.reconnectAttempts++;
-            console.log(`嘗試重新連接 (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
-            setTimeout(() => this.connect(), this.reconnectInterval);
+          // 停止所有定時發送任務
+          this.stopAllAutoSendTasks();
+          
+          // 如果啟用了自動重連且不是主動關閉
+          if (this.autoReconnect && event.code !== 1000) {
+            this.attemptReconnect();
           }
         };
-
-        // 錯誤處理
+        
         this.socket.onerror = (error) => {
           console.error('WebSocket 錯誤:', error);
-          reject(error);
+          // 在某些環境中，error 事件不提供詳細信息
+          if (!this.isConnected) {
+            reject(new Error('WebSocket 連接失敗'));
+          }
+        };
+        
+        this.socket.onmessage = (event) => {
+          this.handleMessage(event.data);
         };
       } catch (error) {
-        console.error('建立 WebSocket 連接時出錯:', error);
+        console.error('創建 WebSocket 時出錯:', error);
         reject(error);
       }
     });
@@ -102,9 +102,6 @@ class WebSocketClient {
   // 關閉 WebSocket 連接
   disconnect() {
     this.autoReconnect = false; // 禁用自動重連
-    
-    // 停止 ping
-    this.stopPing();
     
     if (this.socket) {
       // 如果連接仍然是開啟的，則關閉它
@@ -130,9 +127,6 @@ class WebSocketClient {
   
   // 清理 WebSocket 資源
   cleanupSocket() {
-    // 停止 ping
-    this.stopPing();
-    
     if (this.socket) {
       // 移除所有事件處理器
       this.socket.onopen = null;
@@ -433,84 +427,220 @@ class WebSocketClient {
     console.log(`已設置解析器類型: ${type}`);
   }
   
-  // 設置 ping 間隔（毫秒）
-  setPingInterval(interval) {
+  // 設置定時發送間隔（毫秒）- 已不再使用，保留向後兼容
+  setAutoSendInterval(interval) {
     if (typeof interval !== 'number' || interval < 1000) {
-      console.error('Ping 間隔必須是大於等於 1000 的數字（毫秒）');
+      console.error('定時發送間隔必須是大於等於 1000 的數字（毫秒）');
       return;
     }
     
-    this.pingInterval = interval;
-    console.log(`已設置 Ping 間隔: ${interval}ms`);
+    console.log(`已設置定時發送間隔: ${interval}ms`);
     
-    // 如果 ping 已啟用且連接已建立，則重新啟動 ping
-    if (this.pingEnabled && this.isConnected) {
-      this.stopPing();
-      this.startPing();
+    // 如果有舊的定時發送任務，更新其間隔
+    if (this.autoSendTasks.size === 1) {
+      const taskId = Array.from(this.autoSendTasks.keys())[0];
+      const task = this.autoSendTasks.get(taskId);
+      if (task) {
+        this.updateAutoSendTask(taskId, task.message, interval);
+      }
     }
   }
   
-  // 設置 ping 消息
-  setPingMessage(message) {
-    this.pingMessage = message;
-    console.log('已設置 Ping 消息:', message);
+  // 添加定時發送任務
+  addAutoSendTask(message, intervalMs) {
+    if (!message || typeof intervalMs !== 'number' || intervalMs < 1000) {
+      console.error('添加定時發送任務失敗：消息不能為空，間隔必須是大於等於 1000 的數字（毫秒）');
+      return null;
+    }
+    
+    // 生成唯一任務ID
+    const taskId = 'task_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+    
+    // 創建任務對象
+    const task = {
+      id: taskId,
+      message: message,
+      interval: intervalMs,
+      timer: null,
+      enabled: true
+    };
+    
+    // 存儲任務
+    this.autoSendTasks.set(taskId, task);
+    
+    // 如果已連接，立即啟動任務
+    if (this.isConnected) {
+      this.startAutoSendTask(taskId);
+    }
+    
+    console.log(`已添加定時發送任務 ${taskId}，間隔: ${intervalMs}ms`);
+    return taskId;
   }
   
-  // 啟用或禁用 ping
-  enablePing(enabled = true) {
-    this.pingEnabled = enabled;
+  // 更新定時發送任務
+  updateAutoSendTask(taskId, message = null, intervalMs = null) {
+    const task = this.autoSendTasks.get(taskId);
+    if (!task) {
+      console.error(`更新定時發送任務失敗：找不到任務 ${taskId}`);
+      return false;
+    }
+    
+    // 更新消息（如果提供）
+    if (message !== null) {
+      task.message = message;
+    }
+    
+    // 更新間隔（如果提供）
+    if (intervalMs !== null && typeof intervalMs === 'number' && intervalMs >= 1000) {
+      task.interval = intervalMs;
+    }
+    
+    // 如果任務已啟用且已連接，重新啟動任務以應用新設置
+    if (task.enabled && this.isConnected) {
+      this.stopAutoSendTask(taskId);
+      this.startAutoSendTask(taskId);
+    }
+    
+    console.log(`已更新定時發送任務 ${taskId}`);
+    return true;
+  }
+  
+  // 啟用或禁用定時發送任務
+  enableAutoSendTask(taskId, enabled = true) {
+    const task = this.autoSendTasks.get(taskId);
+    if (!task) {
+      console.error(`啟用/禁用定時發送任務失敗：找不到任務 ${taskId}`);
+      return false;
+    }
+    
+    task.enabled = enabled;
     
     if (enabled) {
-      console.log(`已啟用 Ping（間隔: ${this.pingInterval}ms）`);
+      console.log(`已啟用定時發送任務 ${taskId}`);
       if (this.isConnected) {
-        this.startPing();
+        this.startAutoSendTask(taskId);
       }
     } else {
-      console.log('已禁用 Ping');
-      this.stopPing();
+      console.log(`已禁用定時發送任務 ${taskId}`);
+      this.stopAutoSendTask(taskId);
+    }
+    
+    return true;
+  }
+  
+  // 刪除定時發送任務
+  removeAutoSendTask(taskId) {
+    const task = this.autoSendTasks.get(taskId);
+    if (!task) {
+      console.error(`刪除定時發送任務失敗：找不到任務 ${taskId}`);
+      return false;
+    }
+    
+    // 停止任務
+    this.stopAutoSendTask(taskId);
+    
+    // 從任務列表中移除
+    this.autoSendTasks.delete(taskId);
+    
+    console.log(`已刪除定時發送任務 ${taskId}`);
+    return true;
+  }
+  
+  // 啟動定時發送任務
+  startAutoSendTask(taskId) {
+    const task = this.autoSendTasks.get(taskId);
+    if (!task) {
+      console.error(`啟動定時發送任務失敗：找不到任務 ${taskId}`);
+      return false;
+    }
+    
+    // 確保先停止現有的定時器
+    this.stopAutoSendTask(taskId);
+    
+    if (!task.enabled || !this.isConnected) {
+      return false;
+    }
+    
+    console.log(`開始定時發送任務 ${taskId}，間隔: ${task.interval}ms`);
+    
+    // 設置定時器定期發送消息
+    task.timer = setInterval(() => {
+      if (this.isConnected) {
+        console.log(`定時發送任務 ${taskId} 發送消息...`);
+        this.send(task.message);
+      } else {
+        // 如果連接已斷開，則停止定時發送
+        this.stopAutoSendTask(taskId);
+      }
+    }, task.interval);
+    
+    return true;
+  }
+  
+  // 停止定時發送任務
+  stopAutoSendTask(taskId) {
+    const task = this.autoSendTasks.get(taskId);
+    if (!task) {
+      return false;
+    }
+    
+    if (task.timer) {
+      clearInterval(task.timer);
+      task.timer = null;
+      console.log(`已停止定時發送任務 ${taskId}`);
+    }
+    
+    return true;
+  }
+  
+  // 停止所有定時發送任務
+  stopAllAutoSendTasks() {
+    for (const taskId of this.autoSendTasks.keys()) {
+      this.stopAutoSendTask(taskId);
+    }
+    console.log('已停止所有定時發送任務');
+  }
+  
+  // 啟用或禁用定時發送 (向後兼容舊版本)
+  enableAutoSend(enabled = true, message = null) {
+    // 清除所有現有任務
+    this.stopAllAutoSendTasks();
+    this.autoSendTasks.clear();
+    
+    if (enabled && message) {
+      // 創建一個新任務
+      this.addAutoSendTask(message, this.autoSendInterval || 5000);
+      console.log(`已啟用定時發送（間隔: ${this.autoSendInterval || 5000}ms）`);
+    } else {
+      console.log('已禁用定時發送');
     }
   }
   
-  // 開始發送 ping
-  startPing() {
-    // 確保先停止現有的 ping
-    this.stopPing();
+  // 開始定時發送消息 (向後兼容舊版本)
+  startAutoSend(message) {
+    // 清除所有現有任務
+    this.stopAllAutoSendTasks();
+    this.autoSendTasks.clear();
     
-    if (!this.pingEnabled || !this.isConnected) {
+    if (!this.isConnected || !message) {
       return;
     }
     
-    console.log(`開始發送 Ping，間隔: ${this.pingInterval}ms`);
-    
-    // 設置定時器定期發送 ping
-    this.pingTimer = setInterval(() => {
-      if (this.isConnected) {
-        console.log('發送 Ping...');
-        this.send(this.pingMessage);
-      } else {
-        // 如果連接已斷開，則停止 ping
-        this.stopPing();
-      }
-    }, this.pingInterval);
+    // 創建一個新任務
+    this.addAutoSendTask(message, this.autoSendInterval || 5000);
   }
   
-  // 停止發送 ping
-  stopPing() {
-    if (this.pingTimer) {
-      clearInterval(this.pingTimer);
-      this.pingTimer = null;
-      console.log('已停止發送 Ping');
-    }
+  // 停止定時發送消息 (向後兼容舊版本)
+  stopAutoSend() {
+    this.stopAllAutoSendTasks();
   }
   
   // 重置客戶端狀態
   reset() {
-    this.stopPing();
+    this.stopAutoSend();
     this.disconnect(); // disconnect 方法已經包含了清理 socket 的邏輯
     this.subscriptions.clear();
     this.messageHandlers = [];
-    this.reconnectAttempts = 0;
-    this.autoReconnect = true;
     console.log('WebSocket 客戶端已重置');
   }
 }
@@ -523,4 +653,19 @@ if (isNode) {
 } else {
   // 在瀏覽器環境中，將 WebSocketClient 類添加到全局作用域
   window.WebSocketClient = WebSocketClient;
+}
+
+// 更新定時發送間隔
+function updateAutoSendInterval() {
+    if (wsClient && wsClient.isConnected && autoSendEnabledCheckbox.checked) {
+        const seconds = parseInt(autoSendIntervalInput.value, 10);
+        if (isNaN(seconds) || seconds < 1) {
+            addLog('定時發送間隔必須是大於等於 1 的整數（秒）', 'error');
+            return;
+        }
+        
+        const milliseconds = seconds * 1000;
+        wsClient.setAutoSendInterval(milliseconds);
+        addLog(`已設置定時發送間隔: ${seconds} 秒`, 'info');
+    }
 } 
