@@ -112,7 +112,7 @@ function toggleTheme() {
 }
 
 // 連接 WebSocket
-function connectWebSocket() {
+async function connectWebSocket() {
     // 獲取 WebSocket URL
     const wsUrlInput = document.getElementById('wsUrl');
     
@@ -155,24 +155,19 @@ function connectWebSocket() {
         wsClient.addMessageHandler(generalMessageHandler);
         
         // 連接 WebSocket
-        wsClient.connect()
-            .then(() => {
-                addLog(`已成功連接到 ${wsUrl}`, 'success');
-                updateUIState(true);
-                
-                // 啟動所有已啟用的定時發送任務
-                for (const [taskId, task] of autoSendTasks.entries()) {
-                    if (task.enabled) {
-                        wsClient.startAutoSendTask(taskId);
-                    }
-                }
-            })
-            .catch(error => {
-                addLog(`連接失敗: ${error.message}`, 'error');
-                cleanupWebSocketClient();
-            });
+        await wsClient.connect();
+        addLog(`已成功連接到 ${wsUrl}`, 'success');
+        updateUIState(true);
+        
+        // 啟動所有已啟用的定時發送任務
+        for (const [taskId, task] of autoSendTasks.entries()) {
+            if (task.enabled) {
+                wsClient.startAutoSendTask(taskId);
+            }
+        }
     } catch (error) {
-        addLog(`創建 WebSocket 客戶端時出錯: ${error.message}`, 'error');
+        addLog(`連接失敗: ${error.message}`, 'error');
+        cleanupWebSocketClient();
     }
 }
 
@@ -321,7 +316,7 @@ function updateSubscriptionsList() {
     }
     
     const list = document.createElement('ul');
-    for (const [topic, callback] of activeSubscriptions.entries()) {
+    for (const [topic] of activeSubscriptions.entries()) {
         const item = document.createElement('li');
         item.textContent = topic;
         list.appendChild(item);
