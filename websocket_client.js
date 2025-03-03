@@ -6,12 +6,18 @@ class WebSocketClient {
     this.socket = null;
     this.isConnected = false;
     this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 5;
-    this.reconnectInterval = 3000; // 3秒
+    this.maxReconnectAttempts = 10; // 增加重連嘗試次數
+    this.reconnectInterval = 5000; // 增加到5秒
     this.subscriptions = new Map();
     this.messageHandlers = [];
     this.autoReconnect = true; // 是否自動重連
     this.autoSendTasks = new Map(); // 存儲多個定時發送任務，鍵為任務ID，值為任務對象
+    this.heartbeatInterval = 60000; // 增加到60秒，因為服務器有自己的心跳機制
+    this.heartbeatTimer = null; // 心跳定時器
+    this.connectionCheckInterval = 60000; // 60秒檢查一次連線狀態
+    this.connectionCheckTimer = null; // 連線檢查定時器
+    this.lastMessageTime = 0; // 上次收到消息的時間
+    this.serverPingTime = 0; // 上次收到服務器 ping 的時間
   }
 
   // 初始化並檢查依賴
@@ -52,6 +58,13 @@ class WebSocketClient {
           console.log('WebSocket 連接已打開');
           this.isConnected = true;
           this.reconnectAttempts = 0;
+          this.lastMessageTime = Date.now(); // 初始化最後消息時間
+          
+          // 啟動心跳機制
+          this.startHeartbeat();
+          
+          // 啟動連線檢查
+          this.startConnectionCheck();
           
           // 啟動所有已啟用的定時發送任務
           for (const [taskId, task] of this.autoSendTasks.entries()) {
@@ -66,6 +79,12 @@ class WebSocketClient {
         this.socket.onclose = (event) => {
           console.log(`WebSocket 連接已關閉: ${event.code} ${event.reason}`);
           this.isConnected = false;
+          
+          // 停止心跳
+          this.stopHeartbeat();
+          
+          // 停止連線檢查
+          this.stopConnectionCheck();
           
           // 停止所有定時發送任務
           this.stopAllAutoSendTasks();
@@ -96,6 +115,12 @@ class WebSocketClient {
 
   // 關閉 WebSocket 連接
   disconnect() {
+    // 停止心跳
+    this.stopHeartbeat();
+    
+    // 停止連線檢查
+    this.stopConnectionCheck();
+    
     // 停止所有定時發送任務
     this.stopAllAutoSendTasks();
     
@@ -245,18 +270,34 @@ class WebSocketClient {
   // 處理接收到的消息
   async handleMessage(event) {
     try {
-      // 只處理 ArrayBuffer 數據
-      if (!(event.data instanceof ArrayBuffer)) {
-        throw new Error('不支持的數據類型：僅支持 ArrayBuffer 數據');
+      // 更新最後收到消息的時間
+      this.lastMessageTime = Date.now();
+      
+      let parsedData;
+      
+      // 處理不同類型的數據
+      if (event.data instanceof ArrayBuffer) {
+        // 解析壓縮的二進制數據
+        parsedData = await this.parseCompressedData(event.data);
+      } else if (typeof event.data === 'string') {
+        // 嘗試解析為 JSON
+        try {
+          parsedData = JSON.parse(event.data);
+        } catch (e) {
+          // 如果不是有效的 JSON，則視為純文本
+          parsedData = { type: 'text', content: event.data };
+        }
+      } else {
+        // 其他類型的數據
+        console.warn('收到不支持的數據類型:', typeof event.data);
+        parsedData = { type: 'unknown', content: event.data };
       }
-
-      // 解析壓縮的數據
-      const parsedData = await this.parseCompressedData(event.data);
       
       // 處理解析後的數據
       this.processMessage(parsedData);
     } catch (error) {
-      console.error('處理消息時出錯:', error);
+      console.error('處理消息時出錯:', error.message);
+      // 即使處理失敗，也不影響連接
     }
   }
 
@@ -268,7 +309,23 @@ class WebSocketClient {
       // 解析 JSON
       return JSON.parse(decompressed);
     } catch (error) {
-      console.error('解析壓縮數據時出錯:', error);
+      // 更詳細的錯誤日誌
+      if (error instanceof SyntaxError) {
+        console.error('無法解析為 JSON 的數據:', error.message);
+        // 嘗試當作純文本處理
+        try {
+          const decompressed = pako.inflate(new Uint8Array(compressed), { to: 'string' });
+          return { type: 'text', content: decompressed };
+        } catch (innerError) {
+          console.error('無法解壓縮數據:', innerError.message);
+        }
+      } else {
+        console.error('解析壓縮數據時出錯:', error.message);
+        // 嘗試直接將數據當作 ArrayBuffer 返回
+        return { type: 'binary', content: compressed };
+      }
+      
+      // 如果上述處理都失敗，拋出原始錯誤
       throw error;
     }
   }
@@ -278,6 +335,19 @@ class WebSocketClient {
     // 再次檢查連接狀態
     if (!this.isConnected) {
       console.warn('WebSocket 已斷開，忽略處理消息');
+      return;
+    }
+    
+    // 更新最後收到消息的時間
+    this.lastMessageTime = Date.now();
+    
+    // 處理服務器的 ping 消息
+    if (parsedData && typeof parsedData === 'object' && parsedData.ping) {
+      console.log('收到服務器 ping 消息:', parsedData);
+      // 更新收到服務器 ping 的時間
+      this.serverPingTime = Date.now();
+      // 立即回應 pong 消息
+      this.sendPong(parsedData.ping);
       return;
     }
     
@@ -306,6 +376,19 @@ class WebSocketClient {
         console.error('執行通用消息處理器時出錯:', error);
       }
     });
+  }
+  
+  // 發送 pong 響應給服務器
+  sendPong(timestamp) {
+    try {
+      const pongMessage = {
+        pone: timestamp
+      };
+      this.send(pongMessage);
+      console.log('已回應 pone 消息:', pongMessage);
+    } catch (error) {
+      console.error('發送 pone 消息時出錯:', error);
+    }
   }
   
   // 添加定時發送任務
@@ -507,6 +590,101 @@ class WebSocketClient {
           });
       }
     }, this.reconnectInterval);
+  }
+
+  // 啟動心跳機制
+  startHeartbeat() {
+    // 先清除可能存在的定時器
+    this.stopHeartbeat();
+    
+    // 設置新的定時器
+    this.heartbeatTimer = setInterval(() => {
+      this.sendHeartbeat();
+    }, this.heartbeatInterval);
+    
+    console.log('WebSocket 心跳機制已啟動');
+  }
+  
+  // 停止心跳機制
+  stopHeartbeat() {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+      console.log('WebSocket 心跳機制已停止');
+    }
+  }
+  
+  // 發送心跳包
+  sendHeartbeat() {
+    if (this.isConnected && this.socket && this.socket.readyState === WebSocket.OPEN) {
+      try {
+        // 發送一個簡單的心跳數據
+        const heartbeatData = {
+          type: 'heartbeat',
+          timestamp: Date.now()
+        };
+        
+        this.send(heartbeatData);
+        console.log('已發送心跳包');
+      } catch (error) {
+        console.error('發送心跳包時出錯:', error);
+      }
+    }
+  }
+
+  // 啟動連線檢查
+  startConnectionCheck() {
+    // 先清除可能存在的定時器
+    this.stopConnectionCheck();
+    
+    // 設置新的定時器
+    this.connectionCheckTimer = setInterval(() => {
+      this.checkConnection();
+    }, this.connectionCheckInterval);
+    
+    console.log('WebSocket 連線檢查機制已啟動');
+  }
+  
+  // 停止連線檢查
+  stopConnectionCheck() {
+    if (this.connectionCheckTimer) {
+      clearInterval(this.connectionCheckTimer);
+      this.connectionCheckTimer = null;
+      console.log('WebSocket 連線檢查機制已停止');
+    }
+  }
+  
+  // 檢查連線狀態
+  checkConnection() {
+    // 檢查是否連接
+    if (!this.isConnected) {
+      console.log('連線檢查: 當前未連接');
+      return;
+    }
+    
+    // 檢查 WebSocket 狀態
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+      console.log('連線檢查: WebSocket 不處於開啟狀態，嘗試重新連接');
+      this.isConnected = false;
+      this.cleanupSocket();
+      if (this.autoReconnect) {
+        this.attemptReconnect();
+      }
+      return;
+    }
+    
+    // 檢查是否長時間未收到消息
+    const now = Date.now();
+    const silenceTime = now - this.lastMessageTime;
+    const serverPingSilenceTime = now - this.serverPingTime;
+    
+    // 如果長時間未收到服務器的 ping，而且整體也長時間未收到消息，發送心跳
+    if ((this.serverPingTime === 0 || serverPingSilenceTime > this.connectionCheckInterval * 2) && 
+        silenceTime > this.connectionCheckInterval * 1.5) {
+      console.log(`連線檢查: 已有 ${silenceTime / 1000} 秒未收到消息，${this.serverPingTime > 0 ? `已有 ${serverPingSilenceTime / 1000} 秒未收到服務器 ping，` : ''}嘗試發送心跳檢測連線`);
+      // 發送心跳以測試連線
+      this.sendHeartbeat();
+    }
   }
 }
 
