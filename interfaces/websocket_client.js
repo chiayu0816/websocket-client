@@ -101,26 +101,29 @@ class WebSocketClient {
 
   // 關閉 WebSocket 連接
   disconnect() {
-    this.autoReconnect = false; // 禁用自動重連
+    // 停止所有定時發送任務
+    this.stopAllAutoSendTasks();
+    
+    // 禁用自動重連
+    this.autoReconnect = false;
     
     if (this.socket) {
       // 如果連接仍然是開啟的，則關閉它
-      if (this.isConnected) {
+      if (this.socket.readyState === WebSocketImpl.OPEN || this.socket.readyState === WebSocketImpl.CONNECTING) {
         try {
-          this.socket.close();
+          console.log('正在關閉 WebSocket 連接...');
+          this.socket.close(1000, "正常關閉");
         } catch (e) {
           console.error('關閉 WebSocket 時出錯:', e);
         }
       }
       
-      // 清理事件處理器
-      this.socket.onopen = null;
-      this.socket.onmessage = null;
-      this.socket.onclose = null;
-      this.socket.onerror = null;
-      
-      this.socket = null;
+      // 立即更新連接狀態
       this.isConnected = false;
+      
+      // 清理事件處理器
+      this.cleanupSocket();
+      
       console.log('WebSocket 連接已手動關閉');
     }
   }
@@ -134,11 +137,13 @@ class WebSocketClient {
       this.socket.onclose = null;
       this.socket.onerror = null;
       
-      // 關閉連接
-      try {
-        this.socket.close();
-      } catch (e) {
-        console.error('關閉 WebSocket 時出錯:', e);
+      // 關閉連接（如果尚未關閉）
+      if (this.socket.readyState === WebSocketImpl.OPEN || this.socket.readyState === WebSocketImpl.CONNECTING) {
+        try {
+          this.socket.close();
+        } catch (e) {
+          console.error('關閉 WebSocket 時出錯:', e);
+        }
       }
       
       this.socket = null;
@@ -637,10 +642,23 @@ class WebSocketClient {
   
   // 重置客戶端狀態
   reset() {
-    this.stopAutoSend();
-    this.disconnect(); // disconnect 方法已經包含了清理 socket 的邏輯
+    // 停止所有定時發送任務
+    this.stopAllAutoSendTasks();
+    
+    // 清空定時發送任務列表
+    this.autoSendTasks.clear();
+    
+    // 斷開連接
+    this.disconnect();
+    
+    // 清空訂閱和消息處理器
     this.subscriptions.clear();
     this.messageHandlers = [];
+    
+    // 重置連接狀態
+    this.isConnected = false;
+    this.reconnectAttempts = 0;
+    
     console.log('WebSocket 客戶端已重置');
   }
 }

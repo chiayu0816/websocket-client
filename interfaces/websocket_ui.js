@@ -242,12 +242,16 @@ function connectWebSocket() {
 // 斷開 WebSocket 連接
 function disconnectWebSocket() {
     if (wsClient) {
-        wsClient.disconnect();
         addLog('正在斷開 WebSocket 連接...', 'info');
         
-        // 清空定時發送任務
-        autoSendTasks.clear();
-        updateAutoSendTasksList();
+        // 先停止所有定時發送任務
+        wsClient.stopAllAutoSendTasks();
+        
+        // 斷開連接
+        wsClient.disconnect();
+        
+        // 清理資源
+        cleanupWebSocketClient();
     }
 }
 
