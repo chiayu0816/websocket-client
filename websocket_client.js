@@ -27,6 +27,9 @@ class WebSocketClient {
         console.log(`正在連接到 ${this.url}...`);
         this.socket = new WebSocket(this.url);
         
+        // 設置二進制數據類型為 arraybuffer
+        this.socket.binaryType = 'arraybuffer';
+        
         this.socket.onopen = () => {
           console.log('WebSocket 連接已打開');
           this.isConnected = true;
@@ -238,29 +241,39 @@ class WebSocketClient {
     }
     
     try {
+      console.log('收到的數據類型:', typeof event.data);
+      console.log('是否為 Blob:', event.data instanceof Blob);
+      console.log('是否為 ArrayBuffer:', event.data instanceof ArrayBuffer);
+      
       if (event.data instanceof Blob) {
+        console.log('Blob size:', event.data.size);
+        console.log('Blob type:', event.data.type);
         // 如果是 Blob 數據，使用 FileReader 讀取
         const reader = new FileReader();
         reader.onload = () => {
           const text = reader.result;
+          console.log('Blob 轉換後的文本:', text.substring(0, 200)); // 只顯示前200個字符
           try {
             const parsedData = JSON.parse(text);
             this.processMessage(parsedData);
           } catch (error) {
             console.error('解析 Blob JSON 時出錯:', error);
+            console.error('嘗試解析的文本:', text.substring(0, 200));
           }
         };
         reader.readAsText(event.data);
         return;
       } else if (event.data instanceof ArrayBuffer) {
-        // 如果是 ArrayBuffer，使用 TextDecoder 轉換
+        console.log('ArrayBuffer length:', event.data.byteLength);
         const decoder = new TextDecoder('utf-8');
         const text = decoder.decode(event.data);
+        console.log('ArrayBuffer 轉換後的文本:', text.substring(0, 200));
         try {
           const parsedData = JSON.parse(text);
           this.processMessage(parsedData);
         } catch (error) {
           console.error('解析 ArrayBuffer JSON 時出錯:', error);
+          console.error('嘗試解析的文本:', text.substring(0, 200));
         }
       } else if (typeof event.data === 'string') {
         try {
