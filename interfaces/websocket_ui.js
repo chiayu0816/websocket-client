@@ -287,10 +287,11 @@ function subscribeTopic() {
     }
 
     if (wsClient && wsClient.isConnected) {
-        wsClient.subscribe(topic, data => {
+        const callback = data => {
             addLog(`主題 "${topic}" 收到數據: ${JSON.stringify(data, null, 2)}`, 'received');
-        });
-        activeSubscriptions.add(topic);
+        };
+        wsClient.subscribe(topic, callback);
+        activeSubscriptions.set(topic, callback);
         updateSubscriptionsList();
         addLog(`已訂閱主題: ${topic}`, 'success');
     } else {
@@ -311,7 +312,8 @@ function unsubscribeTopic() {
     }
 
     if (wsClient && wsClient.isConnected) {
-        wsClient.unsubscribe(topic);
+        const callback = activeSubscriptions.get(topic);
+        wsClient.unsubscribe(topic, callback);
         activeSubscriptions.delete(topic);
         updateSubscriptionsList();
         addLog(`已取消訂閱主題: ${topic}`, 'info');
@@ -382,11 +384,11 @@ function updateSubscriptionsList() {
     }
     
     const list = document.createElement('ul');
-    activeSubscriptions.forEach(topic => {
+    for (const [topic, callback] of activeSubscriptions.entries()) {
         const item = document.createElement('li');
         item.textContent = topic;
         list.appendChild(item);
-    });
+    }
     
     subscriptionsList.appendChild(list);
 }
