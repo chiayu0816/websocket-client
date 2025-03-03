@@ -1,7 +1,5 @@
 // DOM 元素
 let wsUrlInput;
-let binaryTypeSelect;
-let parserTypeSelect;
 let connectBtn;
 let disconnectBtn;
 let topicInput;
@@ -35,6 +33,12 @@ window.onload = function() {
             
             // 初始化主題
             initTheme();
+            
+            // 綁定主題切換事件
+            const themeToggle = document.getElementById('themeToggle');
+            if (themeToggle) {
+                themeToggle.onchange = toggleTheme;
+            }
             
             // 標籤頁切換 - 使用更安全的方式
             const tabs = document.querySelectorAll('.tab');
@@ -93,28 +97,6 @@ window.onload = function() {
             const addAutoSendBtn = document.getElementById('addAutoSendBtn');
             if (addAutoSendBtn) addAutoSendBtn.onclick = addAutoSendTask;
             
-            // 二進制類型變更 - 使用更安全的方式
-            const binaryTypeSelect = document.getElementById('binaryType');
-            if (binaryTypeSelect) {
-                binaryTypeSelect.onchange = function() {
-                    if (wsClient && wsClient.isConnected) {
-                        wsClient.setBinaryType(this.value);
-                        addLog(`已設置二進制數據類型: ${this.value}`, 'info');
-                    }
-                };
-            }
-            
-            // 解析器類型變更 - 使用更安全的方式
-            const parserTypeSelect = document.getElementById('parserType');
-            if (parserTypeSelect) {
-                parserTypeSelect.onchange = function() {
-                    if (wsClient && wsClient.isConnected) {
-                        wsClient.setParserType(this.value);
-                        addLog(`已設置解析器類型: ${this.value}`, 'info');
-                    }
-                };
-            }
-
             // 設置示例消息
             const messageContentTextarea = document.getElementById('messageContent');
             if (messageContentTextarea) {
@@ -167,10 +149,8 @@ function toggleTheme() {
 function connectWebSocket() {
     // 獲取 WebSocket URL
     const wsUrlInput = document.getElementById('wsUrl');
-    const binaryTypeSelect = document.getElementById('binaryType');
-    const parserTypeSelect = document.getElementById('parserType');
     
-    if (!wsUrlInput || !binaryTypeSelect || !parserTypeSelect) {
+    if (!wsUrlInput) {
         addLog('無法獲取必要的 DOM 元素', 'error');
         return;
     }
@@ -186,12 +166,6 @@ function connectWebSocket() {
         // 創建 WebSocketClient 實例
         wsClient = new WebSocketClient(wsUrl);
         
-        // 設置二進制數據類型
-        wsClient.setBinaryType(binaryTypeSelect.value);
-        
-        // 設置解析器類型
-        wsClient.setParserType(parserTypeSelect.value);
-        
         // 添加通用消息處理器
         generalMessageHandler = (data) => {
             // 將接收到的消息添加到日誌
@@ -199,9 +173,6 @@ function connectWebSocket() {
             
             if (typeof data === 'string') {
                 logMessage = data;
-            } else if (data instanceof ArrayBuffer || (typeof Buffer !== 'undefined' && data instanceof Buffer)) {
-                // 使用 BinaryParser 解析二進制數據
-                logMessage = wsClient.parseBinaryData(data);
             } else if (typeof data === 'object') {
                 try {
                     logMessage = JSON.stringify(data, null, 2);
@@ -452,25 +423,6 @@ function clearLog() {
     logContainer.innerHTML = '';
 }
 
-// 切換定時發送設置 - 已不再使用，保留向後兼容
-function toggleAutoSendSettings() {
-    const autoSendEnabledCheckbox = document.getElementById('autoSendEnabled');
-    const autoSendIntervalInput = document.getElementById('autoSendInterval');
-    
-    if (!autoSendEnabledCheckbox || !autoSendIntervalInput) return;
-    
-    autoSendIntervalInput.disabled = !autoSendEnabledCheckbox.checked;
-    
-    if (wsClient && wsClient.isConnected) {
-        if (autoSendEnabledCheckbox.checked) {
-            startAutoSend();
-        } else {
-            wsClient.enableAutoSend(false);
-            addLog('已禁用定時發送消息', 'info');
-        }
-    }
-}
-
 // 更新定時發送間隔 - 僅更新輸入框值
 function updateAutoSendInterval() {
     const autoSendIntervalInput = document.getElementById('autoSendInterval');
@@ -713,68 +665,4 @@ function updateAutoSendTasksList() {
             removeAutoSendTask(taskId);
         };
     });
-}
-
-// 開始定時發送消息 - 已不再使用，保留向後兼容
-function startAutoSend() {
-    const autoSendEnabledCheckbox = document.getElementById('autoSendEnabled');
-    const autoSendIntervalInput = document.getElementById('autoSendInterval');
-    const messageTypeSelect = document.getElementById('messageType');
-    const messageContentTextarea = document.getElementById('messageContent');
-    
-    if (!autoSendEnabledCheckbox || !autoSendIntervalInput || !messageTypeSelect || !messageContentTextarea) return;
-    
-    if (!wsClient || !wsClient.isConnected) {
-        addLog('WebSocket 未連接，無法啟用定時發送', 'error');
-        autoSendEnabledCheckbox.checked = false;
-        autoSendIntervalInput.disabled = true;
-        return;
-    }
-
-    const content = messageContentTextarea.value.trim();
-    
-    if (!content) {
-        addLog('請輸入要定時發送的消息內容', 'error');
-        autoSendEnabledCheckbox.checked = false;
-        autoSendIntervalInput.disabled = true;
-        return;
-    }
-
-    try {
-        let message;
-        
-        switch (messageTypeSelect.value) {
-            case 'json':
-                message = JSON.parse(content);
-                break;
-            case 'text':
-                message = content;
-                break;
-            case 'binary':
-                // 將文本轉換為二進制數據
-                const encoder = new TextEncoder();
-                message = encoder.encode(content).buffer;
-                break;
-        }
-        
-        const seconds = parseInt(autoSendIntervalInput.value, 10);
-        if (isNaN(seconds) || seconds < 1) {
-            addLog('定時發送間隔必須是大於等於 1 的整數（秒）', 'error');
-            autoSendEnabledCheckbox.checked = false;
-            autoSendIntervalInput.disabled = true;
-            return;
-        }
-        
-        const milliseconds = seconds * 1000;
-        wsClient.setAutoSendInterval(milliseconds);
-        wsClient.enableAutoSend(true, message);
-        addLog(`已啟用定時發送消息，間隔: ${seconds} 秒`, 'info');
-        
-        // 確保間隔輸入框保持啟用狀態
-        autoSendIntervalInput.disabled = false;
-    } catch (error) {
-        addLog(`準備定時發送消息時出錯: ${error}`, 'error');
-        autoSendEnabledCheckbox.checked = false;
-        autoSendIntervalInput.disabled = true;
-    }
 } 

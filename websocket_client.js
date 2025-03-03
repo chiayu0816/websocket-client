@@ -1,18 +1,5 @@
 // WebSocket 客戶端 - 用於連接、訂閱、解析二進制數據並轉換為 JSON
 
-// 檢測運行環境 - 檢查 isNode 是否已經存在，如果不存在才宣告
-if (typeof isNode === 'undefined') {
-  var isNode = typeof window === 'undefined';
-}
-
-// 在 Node.js 環境中引入 WebSocket 庫
-let WebSocketImpl;
-if (isNode) {
-  WebSocketImpl = require('ws');
-} else {
-  WebSocketImpl = WebSocket;
-}
-
 class WebSocketClient {
   constructor(url) {
     this.url = url;
@@ -23,24 +10,14 @@ class WebSocketClient {
     this.reconnectInterval = 3000; // 3秒
     this.subscriptions = new Map();
     this.messageHandlers = [];
-    this.binaryType = 'arraybuffer'; // 'arraybuffer' 或 'blob'
     this.autoReconnect = true; // 是否自動重連
-    this.parserType = 'auto'; // 默認使用自動檢測解析器
-    this.binaryParser = null; // BinaryParser 實例
-    
-    // 定時發送相關設置 - 改為支持多個定時發送任務
     this.autoSendTasks = new Map(); // 存儲多個定時發送任務，鍵為任務ID，值為任務對象
-    
-    // 初始化二進制解析器
-    if (typeof BinaryParser !== 'undefined') {
-      this.binaryParser = new BinaryParser();
-    }
   }
 
   // 連接到 WebSocket 服務器
   connect() {
     return new Promise((resolve, reject) => {
-      if (this.socket && (this.socket.readyState === WebSocketImpl.OPEN || this.socket.readyState === WebSocketImpl.CONNECTING)) {
+      if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) {
         console.log('WebSocket 已經連接或正在連接中');
         resolve();
         return;
@@ -48,10 +25,7 @@ class WebSocketClient {
       
       try {
         console.log(`正在連接到 ${this.url}...`);
-        this.socket = new WebSocketImpl(this.url);
-        
-        // 設置二進制數據類型
-        this.socket.binaryType = this.binaryType;
+        this.socket = new WebSocket(this.url);
         
         this.socket.onopen = () => {
           console.log('WebSocket 連接已打開');
@@ -90,7 +64,7 @@ class WebSocketClient {
         };
         
         this.socket.onmessage = (event) => {
-          this.handleMessage(event.data);
+          this.handleMessage(event);
         };
       } catch (error) {
         console.error('創建 WebSocket 時出錯:', error);
@@ -109,7 +83,7 @@ class WebSocketClient {
     
     if (this.socket) {
       // 如果連接仍然是開啟的，則關閉它
-      if (this.socket.readyState === WebSocketImpl.OPEN || this.socket.readyState === WebSocketImpl.CONNECTING) {
+      if (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING) {
         try {
           console.log('正在關閉 WebSocket 連接...');
           this.socket.close(1000, "正常關閉");
@@ -138,7 +112,7 @@ class WebSocketClient {
       this.socket.onerror = null;
       
       // 關閉連接（如果尚未關閉）
-      if (this.socket.readyState === WebSocketImpl.OPEN || this.socket.readyState === WebSocketImpl.CONNECTING) {
+      if (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING) {
         try {
           this.socket.close();
         } catch (e) {
@@ -159,10 +133,7 @@ class WebSocketClient {
 
     try {
       // 如果數據是對象，則轉換為 JSON 字符串
-      const message = typeof data === 'object' && !(data instanceof ArrayBuffer) && !(isNode && data instanceof Buffer) 
-        ? JSON.stringify(data) 
-        : data;
-      
+      const message = typeof data === 'object' ? JSON.stringify(data) : data;
       this.socket.send(message);
       return true;
     } catch (error) {
@@ -259,40 +230,33 @@ class WebSocketClient {
   }
 
   // 處理接收到的消息
-  handleMessage(data) {
-    // 如果連接已關閉，不處理消息
+  handleMessage(event) {
+    // 再次檢查連接狀態
     if (!this.isConnected) {
       console.warn('WebSocket 已斷開，忽略接收到的消息');
       return;
     }
     
+    let parsedData;
+    
     try {
-      let parsedData;
-      
-      // 處理二進制數據
-      if (data instanceof ArrayBuffer || (isNode && data instanceof Buffer)) {
-        parsedData = this.parseBinaryData(data);
-      } else if (!isNode && data instanceof Blob) {
-        // 如果是 Blob，則轉換為 ArrayBuffer 後處理
-        this.blobToArrayBuffer(data).then(buffer => {
-          const parsedFromBlob = this.parseBinaryData(buffer);
-          this.processMessage(parsedFromBlob);
-        });
-        return;
-      } else if (typeof data === 'string') {
-        // 嘗試解析 JSON 字符串
+      if (typeof event.data === 'string') {
         try {
-          parsedData = JSON.parse(data);
-        } catch (e) {
-          parsedData = data;
+          // 嘗試解析為 JSON
+          parsedData = JSON.parse(event.data);
+        } catch {
+          // 如果不是有效的 JSON，則作為純文本處理
+          parsedData = event.data;
         }
       } else {
-        parsedData = data;
+        console.warn('收到非文本數據:', event.data);
+        return;
       }
       
+      // 處理解析後的數據
       this.processMessage(parsedData);
     } catch (error) {
-      console.error('處理消息時出錯:', error);
+      console.error('處理接收到的消息時出錯:', error);
     }
   }
 
@@ -331,107 +295,6 @@ class WebSocketClient {
     });
   }
 
-  // 將 Blob 轉換為 ArrayBuffer
-  blobToArrayBuffer(blob) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsArrayBuffer(blob);
-    });
-  }
-
-  // 解析二進制數據
-  parseBinaryData(buffer) {
-    try {
-      // 如果有 BinaryParser 實例，則使用它進行解析
-      if (this.binaryParser) {
-        // 根據選擇的解析器類型進行解析
-        switch (this.parserType) {
-          case 'auto':
-            return this.binaryParser.autoDetectAndParse(buffer);
-          case 'utf8':
-            return this.binaryParser.decode(buffer, 'utf8');
-          case 'json':
-            return this.binaryParser.decode(buffer, 'json');
-          case 'hex':
-            return this.binaryParser.decode(buffer, 'hex');
-          case 'binary':
-            return this.binaryParser.decode(buffer, 'binary');
-          case 'inspect':
-            return this.binaryParser.inspectBinary(buffer);
-          default:
-            return this.binaryParser.autoDetectAndParse(buffer);
-        }
-      }
-      
-      // 如果沒有 BinaryParser 實例，則使用簡單的解析方法
-      // 確保我們有一個 ArrayBuffer
-      const arrayBuffer = isNode && buffer instanceof Buffer 
-        ? buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
-        : buffer;
-      
-      // 嘗試將二進制數據轉換為 UTF-8 字符串
-      let text;
-      if (isNode) {
-        text = Buffer.from(arrayBuffer).toString('utf-8');
-      } else {
-        const textDecoder = new TextDecoder('utf-8');
-        text = textDecoder.decode(arrayBuffer);
-      }
-      
-      // 嘗試將字符串解析為 JSON
-      try {
-        return JSON.parse(text);
-      } catch (e) {
-        // 如果不是有效的 JSON，則返回原始字符串
-        return text;
-      }
-    } catch (error) {
-      console.error('解析二進制數據時出錯:', error);
-      
-      // 如果無法解析，則返回原始 ArrayBuffer 的十六進制表示
-      return {
-        type: 'binary',
-        hex: this.arrayBufferToHex(buffer),
-        buffer: buffer
-      };
-    }
-  }
-
-  // 將 ArrayBuffer 轉換為十六進制字符串
-  arrayBufferToHex(buffer) {
-    let uint8Array;
-    
-    if (isNode && buffer instanceof Buffer) {
-      uint8Array = new Uint8Array(buffer);
-    } else {
-      uint8Array = new Uint8Array(buffer);
-    }
-    
-    return Array.from(uint8Array)
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
-  }
-
-  // 設置二進制數據類型 ('arraybuffer' 或 'blob')
-  setBinaryType(type) {
-    if (type === 'arraybuffer' || type === 'blob') {
-      this.binaryType = type;
-      if (this.socket) {
-        this.socket.binaryType = type;
-      }
-    } else {
-      console.error('無效的二進制類型。必須是 "arraybuffer" 或 "blob"');
-    }
-  }
-  
-  // 設置解析器類型
-  setParserType(type) {
-    this.parserType = type;
-    console.log(`已設置解析器類型: ${type}`);
-  }
-  
   // 設置定時發送間隔（毫秒）- 已不再使用，保留向後兼容
   setAutoSendInterval(interval) {
     if (typeof interval !== 'number' || interval < 1000) {
@@ -606,40 +469,6 @@ class WebSocketClient {
     console.log('已停止所有定時發送任務');
   }
   
-  // 啟用或禁用定時發送 (向後兼容舊版本)
-  enableAutoSend(enabled = true, message = null) {
-    // 清除所有現有任務
-    this.stopAllAutoSendTasks();
-    this.autoSendTasks.clear();
-    
-    if (enabled && message) {
-      // 創建一個新任務
-      this.addAutoSendTask(message, this.autoSendInterval || 5000);
-      console.log(`已啟用定時發送（間隔: ${this.autoSendInterval || 5000}ms）`);
-    } else {
-      console.log('已禁用定時發送');
-    }
-  }
-  
-  // 開始定時發送消息 (向後兼容舊版本)
-  startAutoSend(message) {
-    // 清除所有現有任務
-    this.stopAllAutoSendTasks();
-    this.autoSendTasks.clear();
-    
-    if (!this.isConnected || !message) {
-      return;
-    }
-    
-    // 創建一個新任務
-    this.addAutoSendTask(message, this.autoSendInterval || 5000);
-  }
-  
-  // 停止定時發送消息 (向後兼容舊版本)
-  stopAutoSend() {
-    this.stopAllAutoSendTasks();
-  }
-  
   // 重置客戶端狀態
   reset() {
     // 停止所有定時發送任務
@@ -661,29 +490,31 @@ class WebSocketClient {
     
     console.log('WebSocket 客戶端已重置');
   }
+
+  // 嘗試重新連接
+  attemptReconnect() {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.log('已達到最大重連次數，停止重連');
+      return;
+    }
+
+    this.reconnectAttempts++;
+    console.log(`嘗試重新連接 (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+
+    setTimeout(() => {
+      if (!this.isConnected) {
+        this.connect()
+          .catch(error => {
+            console.error('重連失敗:', error);
+            // 如果還沒達到最大重試次數，繼續嘗試
+            if (this.reconnectAttempts < this.maxReconnectAttempts) {
+              this.attemptReconnect();
+            }
+          });
+      }
+    }, this.reconnectInterval);
+  }
 }
 
 // 導出模塊
-if (isNode) {
-  module.exports = {
-    WebSocketClient
-  };
-} else {
-  // 在瀏覽器環境中，將 WebSocketClient 類添加到全局作用域
-  window.WebSocketClient = WebSocketClient;
-}
-
-// 更新定時發送間隔
-function updateAutoSendInterval() {
-    if (wsClient && wsClient.isConnected && autoSendEnabledCheckbox.checked) {
-        const seconds = parseInt(autoSendIntervalInput.value, 10);
-        if (isNaN(seconds) || seconds < 1) {
-            addLog('定時發送間隔必須是大於等於 1 的整數（秒）', 'error');
-            return;
-        }
-        
-        const milliseconds = seconds * 1000;
-        wsClient.setAutoSendInterval(milliseconds);
-        addLog(`已設置定時發送間隔: ${seconds} 秒`, 'info');
-    }
-} 
+window.WebSocketClient = WebSocketClient; 

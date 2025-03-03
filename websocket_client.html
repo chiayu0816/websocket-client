@@ -292,24 +292,6 @@
                 <label for="wsUrl">WebSocket URL:</label>
                 <input type="text" id="wsUrl" value="wss://echo.websocket.org" placeholder="例如: wss://example.com/ws">
             </div>
-            <div class="form-group">
-                <label for="binaryType">二進制數據類型:</label>
-                <select id="binaryType">
-                    <option value="arraybuffer">ArrayBuffer</option>
-                    <option value="blob">Blob</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="parserType">二進制解析器:</label>
-                <select id="parserType">
-                    <option value="auto">自動檢測</option>
-                    <option value="utf8">UTF-8 文本</option>
-                    <option value="json">JSON</option>
-                    <option value="hex">十六進制</option>
-                    <option value="binary">原始二進制</option>
-                    <option value="inspect">詳細檢查</option>
-                </select>
-            </div>
             <div class="button-group">
                 <button id="connectBtn">連接</button>
                 <button id="disconnectBtn" disabled>斷開連接</button>
@@ -377,7 +359,6 @@
     </div>
 
     <script src="websocket_client.js"></script>
-    <script src="binary_parser.js"></script>
     <script src="websocket_ui.js"></script>
 </body>
 </html> 
