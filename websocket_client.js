@@ -237,26 +237,45 @@ class WebSocketClient {
       return;
     }
     
-    let parsedData;
-    
     try {
-      if (typeof event.data === 'string') {
+      if (event.data instanceof Blob) {
+        // 如果是 Blob 數據，使用 FileReader 讀取
+        const reader = new FileReader();
+        reader.onload = () => {
+          const text = reader.result;
+          try {
+            const parsedData = JSON.parse(text);
+            this.processMessage(parsedData);
+          } catch (error) {
+            console.error('解析 Blob JSON 時出錯:', error);
+          }
+        };
+        reader.readAsText(event.data);
+        return;
+      } else if (event.data instanceof ArrayBuffer) {
+        // 如果是 ArrayBuffer，使用 TextDecoder 轉換
+        const decoder = new TextDecoder('utf-8');
+        const text = decoder.decode(event.data);
         try {
-          // 嘗試解析為 JSON
-          parsedData = JSON.parse(event.data);
-        } catch {
-          // 如果不是有效的 JSON，則作為純文本處理
-          parsedData = event.data;
+          const parsedData = JSON.parse(text);
+          this.processMessage(parsedData);
+        } catch (error) {
+          console.error('解析 ArrayBuffer JSON 時出錯:', error);
+        }
+      } else if (typeof event.data === 'string') {
+        try {
+          const parsedData = JSON.parse(event.data);
+          this.processMessage(parsedData);
+        } catch (error) {
+          console.error('解析字符串 JSON 時出錯:', error);
+          // 如果不是 JSON，則作為純文本處理
+          this.processMessage(event.data);
         }
       } else {
-        console.warn('收到非文本數據:', event.data);
-        return;
+        console.warn('收到未知類型的數據:', typeof event.data);
       }
-      
-      // 處理解析後的數據
-      this.processMessage(parsedData);
     } catch (error) {
-      console.error('處理接收到的消息時出錯:', error);
+      console.error('處理消息時出錯:', error);
     }
   }
 

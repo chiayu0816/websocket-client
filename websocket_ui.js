@@ -97,18 +97,6 @@ window.onload = function() {
             const addAutoSendBtn = document.getElementById('addAutoSendBtn');
             if (addAutoSendBtn) addAutoSendBtn.onclick = addAutoSendTask;
             
-            // 設置示例消息
-            const messageContentTextarea = document.getElementById('messageContent');
-            if (messageContentTextarea) {
-                messageContentTextarea.value = JSON.stringify({
-                    action: 'get_data',
-                    params: {
-                        symbol: 'BTC/USDT',
-                        interval: '1m'
-                    }
-                }, null, 2);
-            }
-            
             console.log('頁面初始化完成');
         } catch (error) {
             console.error('初始化頁面時出錯:', error);
