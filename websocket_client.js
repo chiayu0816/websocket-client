@@ -233,120 +233,35 @@ class WebSocketClient {
   }
 
   // 處理接收到的消息
-  handleMessage(event) {
-    // 再次檢查連接狀態
-    if (!this.isConnected) {
-      console.warn('WebSocket 已斷開，忽略接收到的消息');
-      return;
-    }
-    
+  async handleMessage(event) {
     try {
-      console.log('收到的數據類型:', typeof event.data);
-      console.log('是否為 Blob:', event.data instanceof Blob);
-      console.log('是否為 ArrayBuffer:', event.data instanceof ArrayBuffer);
-      
-      if (event.data instanceof Blob) {
-        console.log('Blob size:', event.data.size);
-        console.log('Blob type:', event.data.type);
-        // 如果是 Blob 數據，使用 FileReader 讀取
-        const reader = new FileReader();
-        reader.onload = () => {
-          const text = reader.result;
-          console.log('Blob 轉換後的文本:', text.substring(0, 200)); // 只顯示前200個字符
-          try {
-            const parsedData = JSON.parse(text);
-            this.processMessage(parsedData);
-          } catch (error) {
-            console.error('解析 Blob JSON 時出錯:', error);
-            console.error('嘗試解析的文本:', text.substring(0, 200));
-          }
-        };
-        reader.readAsText(event.data);
-        return;
-      } else if (event.data instanceof ArrayBuffer) {
-        console.log('ArrayBuffer length:', event.data.byteLength);
-        try {
-          // 檢查數據是否為空
-          if (event.data.byteLength === 0) {
-            console.warn('收到空的 ArrayBuffer');
-            return;
-          }
-
-          // 打印原始數據的十六進制表示
-          const bytes = new Uint8Array(event.data);
-          const hexString = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' ');
-          console.log('原始數據(hex):', hexString.substring(0, 100) + (hexString.length > 100 ? '...' : ''));
-
-          let text;
-          try {
-            // 首先嘗試 UTF-8
-            const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
-            text = utf8Decoder.decode(event.data);
-          } catch (decodeError) {
-            console.log('UTF-8 解碼失敗，嘗試其他方法...');
-            
-            try {
-              // 嘗試 ASCII 解碼
-              const asciiDecoder = new TextDecoder('ascii', { fatal: false });
-              text = asciiDecoder.decode(event.data);
-            } catch (asciiError) {
-              console.log('ASCII 解碼也失敗，嘗試手動轉換...');
-              
-              // 手動將二進制數據轉換為字符串
-              text = String.fromCharCode.apply(null, bytes);
-            }
-          }
-          
-          // 檢查解碼後的文本
-          if (!text || text.length === 0) {
-            console.warn('無法解碼數據為文本');
-            return;
-          }
-          
-          console.log('解碼後的文本:', text.substring(0, 200));
-          
-          // 檢查文本是否以有效的 JSON 字符開始
-          const trimmedText = text.trim();
-          if (!['{', '['].includes(trimmedText[0])) {
-            console.warn('解碼後的文本不是有效的 JSON 格式');
-            // 嘗試在文本中查找 JSON
-            const jsonStart = trimmedText.indexOf('{');
-            const jsonStartArr = trimmedText.indexOf('[');
-            const startIndex = jsonStart >= 0 && jsonStartArr >= 0 
-              ? Math.min(jsonStart, jsonStartArr)
-              : Math.max(jsonStart, jsonStartArr);
-            
-            if (startIndex >= 0) {
-              text = trimmedText.substring(startIndex);
-              console.log('找到可能的 JSON 部分:', text.substring(0, 200));
-            } else {
-              return;
-            }
-          }
-
-          // 嘗試解析 JSON
-          const parsedData = JSON.parse(text);
-          this.processMessage(parsedData);
-        } catch (error) {
-          console.error('處理二進制數據時出錯:', error);
-          if (typeof text !== 'undefined') {
-            console.error('最後嘗試解析的文本:', text.substring(0, 200));
-          }
-        }
-      } else if (typeof event.data === 'string') {
-        try {
-          const parsedData = JSON.parse(event.data);
-          this.processMessage(parsedData);
-        } catch (error) {
-          console.error('解析字符串 JSON 時出錯:', error);
-          // 如果不是 JSON，則作為純文本處理
-          this.processMessage(event.data);
-        }
-      } else {
-        console.warn('收到未知類型的數據:', typeof event.data);
+      // 只處理 ArrayBuffer 數據
+      if (!(event.data instanceof ArrayBuffer)) {
+        throw new Error('不支持的數據類型：僅支持 ArrayBuffer 數據');
       }
+
+      // 解析壓縮的數據
+      const parsedData = await this.parseCompressedData(event.data);
+      
+      // 處理解析後的數據
+      this.processMessage(parsedData);
     } catch (error) {
       console.error('處理消息時出錯:', error);
+    }
+  }
+
+  // 解析壓縮的數據
+  async parseCompressedData(compressed) {
+    try {
+      // 使用 pako 解壓縮數據
+      const decompressed = pako.inflate(new Uint8Array(compressed));
+      // 轉換為文本
+      const jsonText = new TextDecoder().decode(decompressed);
+      // 解析 JSON
+      return JSON.parse(jsonText);
+    } catch (error) {
+      console.error('解析壓縮數據時出錯:', error);
+      throw error;
     }
   }
 
