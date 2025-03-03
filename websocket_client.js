@@ -265,15 +265,49 @@ class WebSocketClient {
         return;
       } else if (event.data instanceof ArrayBuffer) {
         console.log('ArrayBuffer length:', event.data.byteLength);
-        const decoder = new TextDecoder('utf-8');
-        const text = decoder.decode(event.data);
-        console.log('ArrayBuffer 轉換後的文本:', text.substring(0, 200));
         try {
+          // 檢查數據是否為空
+          if (event.data.byteLength === 0) {
+            console.warn('收到空的 ArrayBuffer');
+            return;
+          }
+
+          // 打印原始數據的十六進制表示
+          const bytes = new Uint8Array(event.data);
+          const hexString = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' ');
+          console.log('原始數據(hex):', hexString.substring(0, 100) + (hexString.length > 100 ? '...' : ''));
+
+          // 嘗試使用 TextDecoder 解碼
+          const decoder = new TextDecoder('utf-8', { fatal: true });
+          const text = decoder.decode(event.data);
+          
+          // 檢查解碼後的文本
+          if (text.length === 0) {
+            console.warn('解碼後得到空文本');
+            return;
+          }
+          
+          console.log('解碼後的文本:', text.substring(0, 200));
+          
+          // 檢查文本是否以有效的 JSON 字符開始
+          if (!['{', '['].includes(text.trim()[0])) {
+            console.warn('解碼後的文本不是有效的 JSON 格式');
+            return;
+          }
+
+          // 嘗試解析 JSON
           const parsedData = JSON.parse(text);
           this.processMessage(parsedData);
         } catch (error) {
-          console.error('解析 ArrayBuffer JSON 時出錯:', error);
-          console.error('嘗試解析的文本:', text.substring(0, 200));
+          if (error instanceof TypeError && error.message.includes('TextDecoder')) {
+            console.error('TextDecoder 解碼失敗:', error);
+          } else {
+            console.error('解析 ArrayBuffer JSON 時出錯:', error);
+            // 如果有解碼後的文本，顯示它
+            if (typeof text !== 'undefined') {
+              console.error('嘗試解析的文本:', text.substring(0, 200));
+            }
+          }
         }
       } else if (typeof event.data === 'string') {
         try {
