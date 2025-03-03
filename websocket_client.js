@@ -12,6 +12,12 @@ class WebSocketClient {
     this.messageHandlers = [];
     this.autoReconnect = true; // 是否自動重連
     this.autoSendTasks = new Map(); // 存儲多個定時發送任務，鍵為任務ID，值為任務對象
+
+    // 檢查 pako 是否可用
+    if (typeof pako === 'undefined') {
+      console.error('pako 庫未加載！請確保在 HTML 中正確引入 pako 庫。');
+      throw new Error('pako 庫未加載');
+    }
   }
 
   // 連接到 WebSocket 服務器
@@ -253,6 +259,11 @@ class WebSocketClient {
   // 解析壓縮的數據
   async parseCompressedData(compressed) {
     try {
+      // 再次檢查 pako 是否可用
+      if (typeof pako === 'undefined') {
+        throw new Error('pako 庫未加載，無法解壓縮數據');
+      }
+
       // 使用 pako 解壓縮數據
       const decompressed = pako.inflate(new Uint8Array(compressed));
       // 轉換為文本
@@ -261,6 +272,9 @@ class WebSocketClient {
       return JSON.parse(jsonText);
     } catch (error) {
       console.error('解析壓縮數據時出錯:', error);
+      if (error.message.includes('pako')) {
+        console.error('請確保在 HTML 中正確引入 pako 庫，並且在 WebSocket 客戶端代碼之前加載');
+      }
       throw error;
     }
   }
