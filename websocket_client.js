@@ -283,8 +283,10 @@ class WebSocketClient {
         // 嘗試解析為 JSON
         try {
           parsedData = JSON.parse(event.data);
+          console.log('成功解析JSON消息:', parsedData);
         } catch (e) {
-          // 如果不是有效的 JSON，則視為純文本
+          // 記錄詳細的解析錯誤
+          console.warn(`JSON解析錯誤 (${e.message})，將作為純文本處理:`, event.data);
           parsedData = { type: 'text', content: event.data };
         }
       } else {
@@ -296,7 +298,7 @@ class WebSocketClient {
       // 處理解析後的數據
       this.processMessage(parsedData);
     } catch (error) {
-      console.error('處理消息時出錯:', error.message);
+      console.error('處理消息時出錯:', error.message, error.stack);
       // 即使處理失敗，也不影響連接
     }
   }
@@ -342,13 +344,26 @@ class WebSocketClient {
     this.lastMessageTime = Date.now();
     
     // 處理服務器的 ping 消息
-    if (parsedData && typeof parsedData === 'object' && parsedData.ping) {
-      console.log('收到服務器 ping 消息:', parsedData);
-      // 更新收到服務器 ping 的時間
-      this.serverPingTime = Date.now();
-      // 立即回應 pong 消息
-      this.sendPong(parsedData.ping);
-      return;
+    if (parsedData && typeof parsedData === 'object') {
+      // 直接檢查頂層對象
+      if (parsedData.ping !== undefined) {
+        console.log('收到服務器 ping 消息:', parsedData);
+        // 更新收到服務器 ping 的時間
+        this.serverPingTime = Date.now();
+        // 立即回應 pong 消息
+        this.sendPong(parsedData.ping);
+        return;
+      }
+      
+      // 檢查消息中可能的 data 或其他字段
+      if (parsedData.data && typeof parsedData.data === 'object' && parsedData.data.ping !== undefined) {
+        console.log('收到嵌套的服務器 ping 消息:', parsedData);
+        // 更新收到服務器 ping 的時間
+        this.serverPingTime = Date.now();
+        // 立即回應 pong 消息
+        this.sendPong(parsedData.data.ping);
+        return;
+      }
     }
     
     console.log('收到消息:', parsedData);
@@ -381,13 +396,26 @@ class WebSocketClient {
   // 發送 pong 響應給服務器
   sendPong(timestamp) {
     try {
-      const pongMessage = {
-        pone: timestamp
+      // 創建 pone 消息對象
+      const poneMessage = {
+        pong: timestamp
       };
-      this.send(pongMessage);
-      console.log('已回應 pone 消息:', pongMessage);
+      
+      // 確保以 JSON 格式發送
+      const jsonMessage = JSON.stringify(poneMessage);
+      
+      // 直接使用 WebSocket 的 send 方法，跳過我們的 send 方法中的類型檢查
+      if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+        this.socket.send(jsonMessage);
+        console.log('已回應 pong 消息 (JSON):', pongMessage);
+        return true;
+      } else {
+        console.error('WebSocket 未連接，無法發送 pong 消息');
+        return false;
+      }
     } catch (error) {
-      console.error('發送 pone 消息時出錯:', error);
+      console.error('發送 pong 消息時出錯:', error);
+      return false;
     }
   }
   
