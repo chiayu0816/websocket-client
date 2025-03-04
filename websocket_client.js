@@ -12,12 +12,8 @@ class WebSocketClient {
     this.messageHandlers = [];
     this.autoReconnect = true; // 是否自動重連
     this.autoSendTasks = new Map(); // 存儲多個定時發送任務，鍵為任務ID，值為任務對象
-    this.heartbeatInterval = 60000; // 增加到60秒，因為服務器有自己的心跳機制
-    this.heartbeatTimer = null; // 心跳定時器
     this.connectionCheckInterval = 60000; // 60秒檢查一次連線狀態
     this.connectionCheckTimer = null; // 連線檢查定時器
-    this.lastMessageTime = 0; // 上次收到消息的時間
-    this.serverPingTime = 0; // 上次收到服務器 ping 的時間
   }
 
   // 初始化並檢查依賴
@@ -58,11 +54,7 @@ class WebSocketClient {
           console.log('WebSocket 連接已打開');
           this.isConnected = true;
           this.reconnectAttempts = 0;
-          this.lastMessageTime = Date.now(); // 初始化最後消息時間
-          
-          // 啟動心跳機制
-          this.startHeartbeat();
-          
+
           // 啟動連線檢查
           this.startConnectionCheck();
           
@@ -79,9 +71,6 @@ class WebSocketClient {
         this.socket.onclose = (event) => {
           console.log(`WebSocket 連接已關閉: ${event.code} ${event.reason}`);
           this.isConnected = false;
-          
-          // 停止心跳
-          this.stopHeartbeat();
           
           // 停止連線檢查
           this.stopConnectionCheck();
@@ -115,9 +104,6 @@ class WebSocketClient {
 
   // 關閉 WebSocket 連接
   disconnect() {
-    // 停止心跳
-    this.stopHeartbeat();
-    
     // 停止連線檢查
     this.stopConnectionCheck();
     
@@ -270,9 +256,6 @@ class WebSocketClient {
   // 處理接收到的消息
   async handleMessage(event) {
     try {
-      // 更新最後收到消息的時間
-      this.lastMessageTime = Date.now();
-      
       let parsedData;
       
       // 處理不同類型的數據
@@ -340,16 +323,11 @@ class WebSocketClient {
       return;
     }
     
-    // 更新最後收到消息的時間
-    this.lastMessageTime = Date.now();
-    
     // 處理服務器的 ping 消息
     if (parsedData && typeof parsedData === 'object') {
       // 直接檢查頂層對象
       if (parsedData.ping !== undefined) {
         console.log('收到服務器 ping 消息:', parsedData);
-        // 更新收到服務器 ping 的時間
-        this.serverPingTime = Date.now();
         // 立即回應 pong 消息
         this.sendPong(parsedData.ping);
         return;
@@ -358,8 +336,6 @@ class WebSocketClient {
       // 檢查消息中可能的 data 或其他字段
       if (parsedData.data && typeof parsedData.data === 'object' && parsedData.data.ping !== undefined) {
         console.log('收到嵌套的服務器 ping 消息:', parsedData);
-        // 更新收到服務器 ping 的時間
-        this.serverPingTime = Date.now();
         // 立即回應 pong 消息
         this.sendPong(parsedData.data.ping);
         return;
@@ -620,46 +596,6 @@ class WebSocketClient {
     }, this.reconnectInterval);
   }
 
-  // 啟動心跳機制
-  startHeartbeat() {
-    // 先清除可能存在的定時器
-    this.stopHeartbeat();
-    
-    // 設置新的定時器
-    this.heartbeatTimer = setInterval(() => {
-      this.sendHeartbeat();
-    }, this.heartbeatInterval);
-    
-    console.log('WebSocket 心跳機制已啟動');
-  }
-  
-  // 停止心跳機制
-  stopHeartbeat() {
-    if (this.heartbeatTimer) {
-      clearInterval(this.heartbeatTimer);
-      this.heartbeatTimer = null;
-      console.log('WebSocket 心跳機制已停止');
-    }
-  }
-  
-  // 發送心跳包
-  sendHeartbeat() {
-    if (this.isConnected && this.socket && this.socket.readyState === WebSocket.OPEN) {
-      try {
-        // 發送一個簡單的心跳數據
-        const heartbeatData = {
-          type: 'heartbeat',
-          timestamp: Date.now()
-        };
-        
-        this.send(heartbeatData);
-        console.log('已發送心跳包');
-      } catch (error) {
-        console.error('發送心跳包時出錯:', error);
-      }
-    }
-  }
-
   // 啟動連線檢查
   startConnectionCheck() {
     // 先清除可能存在的定時器
@@ -698,20 +634,6 @@ class WebSocketClient {
       if (this.autoReconnect) {
         this.attemptReconnect();
       }
-      return;
-    }
-    
-    // 檢查是否長時間未收到消息
-    const now = Date.now();
-    const silenceTime = now - this.lastMessageTime;
-    const serverPingSilenceTime = now - this.serverPingTime;
-    
-    // 如果長時間未收到服務器的 ping，而且整體也長時間未收到消息，發送心跳
-    if ((this.serverPingTime === 0 || serverPingSilenceTime > this.connectionCheckInterval * 2) && 
-        silenceTime > this.connectionCheckInterval * 1.5) {
-      console.log(`連線檢查: 已有 ${silenceTime / 1000} 秒未收到消息，${this.serverPingTime > 0 ? `已有 ${serverPingSilenceTime / 1000} 秒未收到服務器 ping，` : ''}嘗試發送心跳檢測連線`);
-      // 發送心跳以測試連線
-      this.sendHeartbeat();
     }
   }
 }
