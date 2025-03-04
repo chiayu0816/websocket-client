@@ -396,13 +396,13 @@ class WebSocketClient {
   // 發送 pong 響應給服務器
   sendPong(timestamp) {
     try {
-      // 創建 pone 消息對象
-      const poneMessage = {
+      // 創建 pong 消息對象
+      const pongMessage = {
         pong: timestamp
       };
       
       // 確保以 JSON 格式發送
-      const jsonMessage = JSON.stringify(poneMessage);
+      const jsonMessage = JSON.stringify(pongMessage);
       
       // 直接使用 WebSocket 的 send 方法，跳過我們的 send 方法中的類型檢查
       if (this.socket && this.socket.readyState === WebSocket.OPEN) {
