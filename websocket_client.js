@@ -1,5 +1,3 @@
-// WebSocket 客戶端 - 用於連接、解析二進制數據並轉換為 JSON
-
 class WebSocketClient {
   constructor(url) {
     this.url = url;
@@ -339,35 +337,7 @@ class WebSocketClient {
     console.log(`已添加定時發送任務 ${taskId}，間隔: ${intervalMs}ms`);
     return taskId;
   }
-  
-  // 更新定時發送任務
-  updateAutoSendTask(taskId, message = null, intervalMs = null) {
-    const task = this.autoSendTasks.get(taskId);
-    if (!task) {
-      console.error(`更新定時發送任務失敗：找不到任務 ${taskId}`);
-      return false;
-    }
-    
-    // 更新消息（如果提供）
-    if (message !== null) {
-      task.message = message;
-    }
-    
-    // 更新間隔（如果提供）
-    if (intervalMs !== null && typeof intervalMs === 'number' && intervalMs >= 1000) {
-      task.interval = intervalMs;
-    }
-    
-    // 如果任務已啟用且已連接，重新啟動任務以應用新設置
-    if (task.enabled && this.isConnected) {
-      this.stopAutoSendTask(taskId);
-      this.startAutoSendTask(taskId);
-    }
-    
-    console.log(`已更新定時發送任務 ${taskId}`);
-    return true;
-  }
-  
+
   // 啟用或禁用定時發送任務
   enableAutoSendTask(taskId, enabled = true) {
     const task = this.autoSendTasks.get(taskId);
@@ -462,27 +432,6 @@ class WebSocketClient {
       this.stopAutoSendTask(taskId);
     }
     console.log('已停止所有定時發送任務');
-  }
-  
-  // 重置客戶端狀態
-  reset() {
-    // 停止所有定時發送任務
-    this.stopAllAutoSendTasks();
-    
-    // 清空定時發送任務列表
-    this.autoSendTasks.clear();
-    
-    // 斷開連接
-    this.disconnect();
-    
-    // 清空訂閱和消息處理器
-    this.messageHandlers = [];
-    
-    // 重置連接狀態
-    this.isConnected = false;
-    this.reconnectAttempts = 0;
-    
-    console.log('WebSocket 客戶端已重置');
   }
 
   // 嘗試重新連接
