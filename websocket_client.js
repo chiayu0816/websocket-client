@@ -1,4 +1,4 @@
-// WebSocket 客戶端 - 用於連接、訂閱、解析二進制數據並轉換為 JSON
+// WebSocket 客戶端 - 用於連接、解析二進制數據並轉換為 JSON
 
 class WebSocketClient {
   constructor(url) {
@@ -8,7 +8,6 @@ class WebSocketClient {
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 10; // 增加重連嘗試次數
     this.reconnectInterval = 5000; // 增加到5秒
-    this.subscriptions = new Map();
     this.messageHandlers = [];
     this.autoReconnect = true; // 是否自動重連
     this.autoSendTasks = new Map(); // 存儲多個定時發送任務，鍵為任務ID，值為任務對象
@@ -174,76 +173,6 @@ class WebSocketClient {
     }
   }
 
-  // 訂閱特定主題
-  subscribe(topic, callback) {
-    if (!this.subscriptions.has(topic)) {
-      this.subscriptions.set(topic, []);
-      
-      // 向服務器發送訂閱請求
-      if (this.isConnected && this.socket) {
-        const subscribeMessage = {
-          action: 'subscribe',
-          topic: topic
-        };
-        this.send(subscribeMessage);
-        console.log(`向服務器發送訂閱請求: ${topic}`);
-      } else {
-        console.warn(`WebSocket 未連接，無法發送訂閱請求: ${topic}`);
-      }
-    }
-    
-    // 添加回調函數到訂閱列表
-    this.subscriptions.get(topic).push(callback);
-    console.log(`已訂閱主題: ${topic}`);
-  }
-
-  // 取消訂閱特定主題
-  unsubscribe(topic, callback = null) {
-    if (!this.subscriptions.has(topic)) {
-      console.warn(`未找到主題的訂閱: ${topic}`);
-      return;
-    }
-
-    if (callback) {
-      // 移除特定回調
-      const callbacks = this.subscriptions.get(topic);
-      const index = callbacks.indexOf(callback);
-      if (index !== -1) {
-        callbacks.splice(index, 1);
-      }
-      
-      // 如果沒有更多回調，則完全取消訂閱
-      if (callbacks.length === 0) {
-        this.subscriptions.delete(topic);
-        
-        // 向服務器發送取消訂閱請求
-        if (this.isConnected && this.socket) {
-          const unsubscribeMessage = {
-            action: 'unsubscribe',
-            topic: topic
-          };
-          this.send(unsubscribeMessage);
-          console.log(`向服務器發送取消訂閱請求: ${topic}`);
-        }
-      }
-    } else {
-      // 移除所有回調
-      this.subscriptions.delete(topic);
-      
-      // 向服務器發送取消訂閱請求
-      if (this.isConnected && this.socket) {
-        const unsubscribeMessage = {
-          action: 'unsubscribe',
-          topic: topic
-        };
-        this.send(unsubscribeMessage);
-        console.log(`向服務器發送取消訂閱請求: ${topic}`);
-      }
-    }
-    
-    console.log(`已取消訂閱主題: ${topic}`);
-  }
-
   // 添加通用消息處理器
   addMessageHandler(handler) {
     if (typeof handler === 'function') {
@@ -344,21 +273,6 @@ class WebSocketClient {
     
     console.log('收到消息:', parsedData);
     
-    // 檢查消息是否包含主題信息
-    const topic = parsedData.topic || parsedData.channel || '';
-    
-    // 調用特定主題的回調
-    if (topic && this.subscriptions.has(topic)) {
-      const callbacks = this.subscriptions.get(topic);
-      callbacks.forEach(callback => {
-        try {
-          callback(parsedData);
-        } catch (error) {
-          console.error(`執行主題 "${topic}" 的回調時出錯:`, error);
-        }
-      });
-    }
-    
     // 調用通用消息處理器
     this.messageHandlers.forEach(handler => {
       try {
@@ -383,7 +297,7 @@ class WebSocketClient {
       // 直接使用 WebSocket 的 send 方法，跳過我們的 send 方法中的類型檢查
       if (this.socket && this.socket.readyState === WebSocket.OPEN) {
         this.socket.send(jsonMessage);
-        console.log('已回應 pong 消息 (JSON):', pongMessage);
+        console.log('已回應 pong 消息:', pongMessage);
         return true;
       } else {
         console.error('WebSocket 未連接，無法發送 pong 消息');
@@ -562,7 +476,6 @@ class WebSocketClient {
     this.disconnect();
     
     // 清空訂閱和消息處理器
-    this.subscriptions.clear();
     this.messageHandlers = [];
     
     // 重置連接狀態

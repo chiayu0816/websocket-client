@@ -32,56 +32,35 @@
         </div>
         
         <div class="card">
-            <h2>訂閱與發送</h2>
-            <div class="tabs">
-                <div class="tab active" data-tab="subscribe">訂閱主題</div>
-                <div class="tab" data-tab="send">發送消息</div>
-            </div>
+            <h2>發送消息</h2>
             
-            <div class="tab-content active" id="subscribe-tab">
-                <div class="form-group">
-                    <label for="topic">主題:</label>
-                    <input type="text" id="topic" placeholder="例如: market_data">
-                </div>
-                <div class="button-group">
-                    <button id="subscribeBtn" disabled>訂閱</button>
-                    <button id="unsubscribeBtn" disabled>取消訂閱</button>
-                </div>
-                <div class="form-group">
-                    <label>已訂閱的主題:</label>
-                    <div id="subscriptionsList"></div>
-                </div>
+            <div class="form-group">
+                <label for="messageType">消息類型:</label>
+                <select id="messageType">
+                    <option value="json">JSON</option>
+                    <option value="text">文本</option>
+                    <option value="binary">二進制</option>
+                </select>
             </div>
-            
-            <div class="tab-content" id="send-tab">
-                <div class="form-group">
-                    <label for="messageType">消息類型:</label>
-                    <select id="messageType">
-                        <option value="json">JSON</option>
-                        <option value="text">文本</option>
-                        <option value="binary">二進制</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="messageContent">消息內容:</label>
-                    <textarea id="messageContent" rows="5"></textarea>
-                </div>
-                <div class="form-group">
-                    <label>定時發送設置:</label>
-                    <div style="display: flex; align-items: center; margin-bottom: 10px;">
-                        <div style="display: flex; align-items: center; flex: 1;">
-                            <label for="autoSendInterval" style="margin-bottom: 0; margin-right: 10px;">間隔 (秒):</label>
-                            <input type="number" id="autoSendInterval" value="5" min="1" style="width: 80px;">
-                        </div>
-                        <button id="addAutoSendBtn" class="small-btn" disabled>添加定時任務</button>
+            <div class="form-group">
+                <label for="messageContent">消息內容:</label>
+                <textarea id="messageContent" rows="5"></textarea>
+            </div>
+            <div class="form-group">
+                <label>定時發送設置:</label>
+                <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                    <div style="display: flex; align-items: center; flex: 1;">
+                        <label for="autoSendInterval" style="margin-bottom: 0; margin-right: 10px;">間隔 (秒):</label>
+                        <input type="number" id="autoSendInterval" value="5" min="1" style="width: 80px;">
                     </div>
+                    <button id="addAutoSendBtn" class="small-btn" disabled>添加定時任務</button>
                 </div>
-                <div class="form-group">
-                    <label>定時發送任務列表:</label>
-                    <div id="autoSendTasksList" class="tasks-list"></div>
-                </div>
-                <button id="sendBtn" disabled>發送</button>
             </div>
+            <div class="form-group">
+                <label>定時發送任務列表:</label>
+                <div id="autoSendTasksList" class="tasks-list"></div>
+            </div>
+            <button id="sendBtn" disabled>發送</button>
         </div>
         
         <div class="card">
